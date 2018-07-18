@@ -1511,7 +1511,7 @@ int cmor_set_cur_dataset_attribute_internal(char *name, char *value,
         sprintf(msg,
                 "Setting dataset attribute: %s, we already have %i "
                 "elements set which is the max, this element won't be set",
-                name, CMOR_MAX_ELEMENTS);
+                name, CMOR_MAX_ATTRIBUTES);
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
         return (1);
