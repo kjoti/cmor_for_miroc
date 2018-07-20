@@ -2409,8 +2409,10 @@ int cmor_set_refvar(int var_id, int *refvar, int ntimes_passed)
                     cmor_vars[*refvar].id);
             cmor_handle_error_var(msg, CMOR_CRITICAL, var_id);
         }
+#if 0 /* unnecessary and harmful */
         cmor_vars[var_id].ntimes_written =
           cmor_vars[nRefVarID].ntimes_written - ntimes_passed;
+#endif
     }
     cmor_pop_traceback();
     return (nRefVarID);
