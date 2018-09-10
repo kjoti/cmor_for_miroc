@@ -577,7 +577,7 @@ int cmor_zfactor(int *zvar_id, int axis_id, char *name, char *units,
                 }
             }
 
-            if (k == 0) {
+            if (0 /* k == 0 */) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "zfactor: axis %s, variable %s (table %s), is "
                          "not time dependent and you did not provide "
