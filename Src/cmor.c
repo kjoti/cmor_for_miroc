@@ -5533,19 +5533,25 @@ int cmor_CreateFromTemplate(int nVarRefTblID, char *templateSTH,
 /************************************************************************/
 int cmor_addVersion()
 {
-    time_t t;
-    struct tm *tm;
     char szVersion[CMOR_MAX_STRING];;
-    char szDate[CMOR_MAX_STRING];
+    char *myverstr;
 
     cmor_add_traceback("cmor_addVersion");
     cmor_is_setup();
 
-    time(&t);
-    tm = localtime(&t);
-    strcpy(szVersion, "v");
-    strftime(szDate, CMOR_MAX_STRING, "%Y%m%d", tm);
-    strcat(szVersion, szDate);
+    if ((myverstr = getenv("CMOR_DRS_VERSION")) != NULL) {
+        snprintf(szVersion, sizeof szVersion, "%s", myverstr);
+    } else {
+        time_t t;
+        struct tm *tm;
+        char szDate[CMOR_MAX_STRING];
+
+        time(&t);
+        tm = localtime(&t);
+        strcpy(szVersion, "v");
+        strftime(szDate, CMOR_MAX_STRING, "%Y%m%d", tm);
+        strcat(szVersion, szDate);
+    }
 
     cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_VERSION, szVersion, 1);
     cmor_pop_traceback();
