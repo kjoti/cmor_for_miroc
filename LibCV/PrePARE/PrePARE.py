@@ -315,8 +315,17 @@ class checkCMIP6(object):
         return True if len(dim) == 1 and infile.dimensions[dim[0]] == 7 else False
 
     @staticmethod
+    def has_4_pressure_levels(infile, **kwargs):
+        dim = [d for d in infile.dimensions.keys() if 'plev' in d]
+        return True if len(dim) == 1 and infile.dimensions[dim[0]] == 4 else False
+
+    @staticmethod
     def has_land_in_cell_methods(infile, variable, **kwargs):
         return True if 'land' in infile.variables[variable].cell_methods else False
+
+    @staticmethod
+    def has_variable_name(filename, **kwargs):
+        return True
 
     def ControlVocab(self, ncfile, variable=None, print_all=True):
         """
@@ -576,12 +585,8 @@ class checkCMIP6(object):
                 if isinstance(file_value, numpy.ndarray):
                     file_value = file_value[0]
                 if isinstance(table_value, float):
-                    if file_value == 0:
-                        if table_value != file_value:
-                            file_value = False
-                    else:
-                        if abs(1 - (table_value / file_value)) < 0.00001:
-                            table_value = file_value
+                    if abs(table_value - file_value) <= 0.00001 * abs(table_value):
+                        table_value = file_value
                 if key == "cell_methods":
                     idx = file_value.find(" (")
                     if idx != -1:
