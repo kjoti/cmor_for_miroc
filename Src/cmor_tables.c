@@ -7,8 +7,8 @@
 #include <udunits2.h>
 #include <stdlib.h>
 #include "cmor_locale.h"
-#include "json.h"
-#include "json_tokener.h"
+#include <json-c/json.h>
+#include <json-c/json_tokener.h>
 #include <sys/stat.h>
 
 /************************************************************************/
@@ -618,25 +618,29 @@ int cmor_load_table(char szTable[CMOR_MAX_STRING], int *table_id)
         if (rc != TABLE_SUCCESS) {
             snprintf(msg, CMOR_MAX_STRING, "Can't open/read JSON table %s",
                      szAxisEntryFilenameJSON);
-            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_handle_error(msg, CMOR_CRITICAL);
+            return (1);
         }
         rc = cmor_load_table_internal(szTable, table_id);
         if (rc != TABLE_SUCCESS) {
             snprintf(msg, CMOR_MAX_STRING, "Can't open/read JSON table %s",
                      szTable);
-            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_handle_error(msg, CMOR_CRITICAL);
+            return (1);
         }
         rc = cmor_load_table_internal(szFormulaVarFilenameJSON, table_id);
         if (rc != TABLE_SUCCESS) {
             snprintf(msg, CMOR_MAX_STRING, "Can't open/read JSON table %s",
                      szFormulaVarFilenameJSON);
-            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_handle_error(msg, CMOR_CRITICAL);
+            return (1);
         }
         rc = cmor_load_table_internal(szControlFilenameJSON, table_id);
         if (rc != TABLE_SUCCESS) {
             snprintf(msg, CMOR_MAX_STRING, "Can't open/read JSON table %s",
                      szControlFilenameJSON);
-            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_handle_error(msg, CMOR_CRITICAL);
+            return (1);
         }
 
     } else if (rc == TABLE_FOUND) {

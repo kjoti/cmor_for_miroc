@@ -2,6 +2,7 @@
 # Peter Uhe 24 July 2014
 # Martin Dix 21 Nov 2014
 #
+from __future__ import print_function
 import numpy as np
 import datetime
 import cmor
@@ -40,7 +41,7 @@ def save(opts, threeD=True):
         model_date = model_date.replace(day=1)
         min_tvals.append(model_date.toordinal() - 1)
         # max_bound is first day of next month
-        tyr = model_date.year + model_date.month / 12
+        tyr = model_date.year + int(model_date.month / 12)
         tmon = model_date.month % 12 + 1
         model_date = model_date.replace(year=tyr, month=tmon)
         max_tvals.append(model_date.toordinal() - 1)
@@ -131,7 +132,7 @@ def save(opts, threeD=True):
                 len(lon)),
             np.float32) + 290.
     try:
-        print 'writing...'
+        print('writing...')
         cmor.write(variable_id, data_vals[:], ntimes_passed=np.shape(
             data_vals)[0])  # assuming time is the first dimension
     except Exception as e:
@@ -142,7 +143,7 @@ def save(opts, threeD=True):
     except BaseException:
         raise Exception("ERROR closing cmor file!")
 
-    print path
+    print(path)
 
 
 if __name__ == "__main__":

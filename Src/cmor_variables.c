@@ -1828,7 +1828,8 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
             cmor_vars[vrid].missing = (double)*(double *)missing;
         if (fabs((cmor_vars[vrid].missing/cmor_vars[vrid].omissing)-1) > 0.001) {
             snprintf(msg, CMOR_MAX_STRING,
-                     "replaced missing value flag (%g) with standard missing value (%g)",
+                     "replaced missing value flag (%g) and "
+                     "corresponding data with standard missing value (%g)",
                      cmor_vars[vrid].missing, cmor_vars[vrid].omissing);
             cmor_update_history(vrid, msg);
         }
@@ -1985,6 +1986,7 @@ int cmor_set_var_def_att(cmor_var_def_t * var, char att[CMOR_MAX_STRING],
                 j *= strcmp(DIMENSION_ALEVEL, dim);
                 j *= strcmp(DIMENSION_ALEVEL_HALF, dim);
                 j *= strcmp(DIMENSION_OLEVEL, dim);
+                j *= strcmp(DIMENSION_OLEVEL_HALF, dim);
                 for (k = 0; k < CMOR_MAX_ELEMENTS; k++) {
                     if (cmor_tables[var->table_id].generic_levels[k][0] == '\0')
                         break;

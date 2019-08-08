@@ -4,7 +4,7 @@
 #include "numpy/arrayobject.h"
 #include "cmor.h"
 
-extern int cmor_CV_variable(int *, char *, char *, double *,
+extern int cmor_CV_variable(int *, char *, char *, float *, int *,
                             double, double, double, double);
 
 /************************************************************************/
@@ -570,7 +570,7 @@ static PyObject *PyCMOR_getincvalues(PyObject * self, PyObject * args)
 }
 
 /************************************************************************/
-/*                       PyCV_check_variable()                          */
+/*                       PyCV_setup_variable()                          */
 /************************************************************************/
 static PyObject *PyCV_setup_variable(PyObject * self, PyObject * args)
 {
@@ -585,13 +585,15 @@ static PyObject *PyCV_setup_variable(PyObject * self, PyObject * args)
 
     int var_id;
 
-    if (!PyArg_ParseTuple(args, "ssfdddd", &name, &units, &missing,
-                          &startime, &endtime, &startimebnds, &endtimebnds)) {
+    if (!PyArg_ParseTuple(args, "ssfidddd", &name, &units, 
+                          &missing, &imissing,
+                          &startime, &endtime, 
+                          &startimebnds, &endtimebnds)) {
         return (Py_BuildValue("i", -1));
     }
 
-    cmor_CV_variable(&var_id, name, units, &missing, startime, endtime,
-                     startimebnds, endtimebnds);
+    cmor_CV_variable(&var_id, name, units, &missing, &imissing, 
+                     startime, endtime, startimebnds, endtimebnds);
 
     return (Py_BuildValue("i", var_id));
 
@@ -656,8 +658,29 @@ static PyMethodDef MyExtractMethods[] = {
     {NULL, NULL}                /*sentinel */
 };
 
-PyMODINIT_FUNC init_cmip6_cv(void)
+#if PY_MAJOR_VERSION >= 3
+static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "_cmip6_cv",
+        NULL,
+        -1,
+        MyExtractMethods
+};
+#endif
+
+
+#if PY_MAJOR_VERSION >= 3
+PyMODINIT_FUNC PyInit__cmip6_cv(void)
+{
+    PyObject *cmip6_cv_module;
+    cmip6_cv_module = PyModule_Create(&moduledef);
+    import_array();
+    return cmip6_cv_module;
+}
+#else
+void init_cmip6_cv(void)
 {
     (void)Py_InitModule("_cmip6_cv", MyExtractMethods);
     import_array();
 }
+#endif

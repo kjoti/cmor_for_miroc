@@ -5,11 +5,12 @@ Created on Fri Feb 19 11:33:52 2016
 @author: Denis Nadeau LLNL, Charles Doutriaux LLNL
 '''
 
-import cmor_const
+from cmip6_cv import cmor_const
 import numpy
 import os
-import _cmip6_cv
+from cmip6_cv import _cmip6_cv
 import signal
+import six
 
 
 def sig_handler(signum, frame):
@@ -97,7 +98,7 @@ def load_table(table):
     Usage:
     load_table(table)
     """
-    if not isinstance(table, str):
+    if not isinstance(table, six.string_types):
         raise Exception("Error, must pass a string")
 #     if not os.path.exists(table):
 #         raise Exception, "Error, the table you specified (%s) does not exists" % table
@@ -374,7 +375,7 @@ def check_ISOTime():
     return(ierr)
 
 
-def setup_variable(name, units, missing, startime,
+def setup_variable(name, units, missing, imissing, startime,
                    endtime, startimebnds, endtimebnds):
     '''
     Create variable  attributes from the table loaded by load_table.
@@ -384,7 +385,8 @@ def setup_variable(name, units, missing, startime,
     Where:
         name is the variable name to validate
         units are the variable units
-        missing is the missing value for this variable.
+        missing is the missing floating-point value for this variable.
+        imissing is the missing integer value for this variable.
         startime: time value for first part of timestap -- time[0]
         endtime: time value for last part of timestap -- time[-1]
         startimebnds: time bound value for first part of timestap -- time_bnds[0]
@@ -396,6 +398,7 @@ def setup_variable(name, units, missing, startime,
         name,
         units,
         missing,
+        imissing,
         startime,
         endtime,
         startimebnds,

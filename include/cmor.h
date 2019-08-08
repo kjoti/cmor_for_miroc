@@ -2,7 +2,7 @@
 #define CMOR_H
 
 #define CMOR_VERSION_MAJOR 3
-#define CMOR_VERSION_MINOR 4
+#define CMOR_VERSION_MINOR 5
 #define CMOR_VERSION_PATCH 0
 
 #define CMOR_CF_VERSION_MAJOR 1
@@ -254,6 +254,7 @@
 #define DIMENSION_ALEVEL_HALF         "alevhalf"
 #define DIMENSION_ZLEVEL              "zlevel"
 #define DIMENSION_OLEVEL              "olevel"
+#define DIMENSION_OLEVEL_HALF         "olevhalf"
 
 #define AREA                          "area"
 #define VOLUME                        "volume"
