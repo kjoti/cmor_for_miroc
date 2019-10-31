@@ -956,12 +956,14 @@ int cmor_grid(int *grid_id, int ndims, int *axes_ids, char type,
           0;
     }
     if (blat == NULL) {
+#if 0
         if (cmor_grids[cmor_ngrids].istimevarying != 1) {
             snprintf(msg, CMOR_MAX_STRING,
                      "it is recommended you pass the latitude bounds "
                      "values when defining a grid");
             cmor_handle_error(msg, CMOR_WARNING);
         }
+#endif
     } else {
         cmor_copy_data(&cmor_grids[cmor_ngrids].blats, blat, type,
                        n * nvertices);
@@ -1007,13 +1009,13 @@ int cmor_grid(int *grid_id, int ndims, int *axes_ids, char type,
                                              [0], "bounds", 'c', msg);
     }
     if (blon == NULL) {
-
+#if 0
         if (cmor_grids[cmor_ngrids].istimevarying != 1) {
             snprintf(msg, CMOR_MAX_STRING,
                      "it is recommended you pass the longitude bounds values when defining a grid");
             cmor_handle_error(msg, CMOR_WARNING);
         }
-
+#endif
     } else {
 
         cmor_copy_data(&cmor_grids[cmor_ngrids].blons, blon, type,
