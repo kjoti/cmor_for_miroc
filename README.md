@@ -5,9 +5,9 @@ CMOR3 documentation can be found at: http://cmor.llnl.gov
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.592733.svg)](https://doi.org/10.5281/zenodo.592733)
 [![stable version](https://img.shields.io/github/v/release/pcmdi/cmor.svg)](https://github.com/PCMDI/cmor/releases/latest)
-![platforms](https://anaconda.org/pcmdi/cmor/badges/platforms.svg)
-[![Anaconda-Server Badge](https://anaconda.org/conda-forge/cmor/badges/version.svg)](https://anaconda.org/conda-forge/cmor)
-[![Anaconda-Server Badge](https://anaconda.org/conda-forge/cmor/badges/downloads.svg)](https://anaconda.org/conda-forge/cmor)
+[![Conda cmor platforms](https://img.shields.io/conda/p/conda-forge/cmor.svg)](https://anaconda.org/conda-forge/cmor)
+[![Conda cmor version](https://img.shields.io/conda/v/conda-forge/cmor.svg)](https://anaconda.org/conda-forge/cmor)
+[![Conda cmor downloads](https://img.shields.io/conda/d/conda-forge/cmor.svg)](https://anaconda.org/conda-forge/cmor)
 
 ## Contributors
 
@@ -45,3 +45,9 @@ The content of this repository is developed by climate and computer scientists f
 [BER]: https://science.osti.gov/ber
 [DOE]: https://www.energy.gov/
 [OS]: https://science.osti.gov/
+
+## Release
+
+The code of CMOR is released under the BSD 3-Clause License. For more details, see the [LICENSE](LICENSE) File.
+
+LLNL-CODE-2005936

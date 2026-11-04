@@ -1977,7 +1977,7 @@ void cmor_init_var_def(cmor_var_def_t * var, int table_id)
     var->shuffle = 0;
     var->deflate = 1;
     var->deflate_level = 1;
-    var->zstandard_level = 3;
+    var->zstandard_level = -999999;
     var->generic_level_name[0] = '\0';
     var->branding_suffix[0] = '\0';
     var->temporal_label[0] = '\0';
@@ -2408,6 +2408,14 @@ int cmor_set_zstandard(int var_id, int zstandard_level)
         return (-1);
     }
 
+    if (zstandard_level < -131072 || zstandard_level > 22) {
+        cmor_handle_error_var_variadic(
+            "Your zstandard level of %d is outside of the range [-131072, 22].\n! "
+            "Zstandard compression will not be applied to variable id(%d)",
+            CMOR_CRITICAL, var_id,
+            zstandard_level, var_id);
+    }
+
     cmor_vars[var_id].zstandard_level = zstandard_level;
     cmor_pop_traceback();
     return (0);
@@ -2508,6 +2516,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
     size_t counter2[CMOR_MAX_DIMENSIONS];
     size_t max_counter[CMOR_MAX_DIMENSIONS];
     size_t min_counter[CMOR_MAX_DIMENSIONS];
+    size_t nan_counter[CMOR_MAX_DIMENSIONS];
     size_t starts[CMOR_MAX_DIMENSIONS];
     size_t nelements, loc, add, nelts;
     double *data_tmp = NULL, tmp = 0., tmp2, amean;
@@ -2519,18 +2528,23 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
     int ierr = 0, dounits = 1;
     char msg[CMOR_MAX_STRING];
     char msg2[CMOR_MAX_STRING];
+    char units[CMOR_MAX_STRING];
     double *tmp_vals;
     ut_unit *user_units = NULL, *cmor_units = NULL;
     cv_converter *ut_cmor_converter = NULL;
     char local_unit[CMOR_MAX_STRING];
-    size_t n_lower_min = 0, n_greater_max = 0;
+    size_t n_lower_min = 0, n_greater_max = 0, n_nan = 0;
     double emax, emin, first_time;
     extern ut_system *ut_read;
     size_t tmpindex = 0;
     size_t index;
     char *msg_min;
     char *msg_max;
+    char *msg_nan;
     size_t msg_len;
+    cmor_axis_def_t *refaxis;
+    size_t time_axis_start, time_axis_count;
+    double *time_axis_vals;
 
     cmor_add_traceback("cmor_write_var_to_file");
     cmor_is_setup();
@@ -2792,6 +2806,16 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
             tmp = (double)((double *)data)[loc];
         }
 
+        // check for NaN values
+        if (isnan(tmp) != 0) {
+            n_nan += 1;
+            if (n_nan == 1) {
+                for (j = 0; j < avar->ndims; j++) {
+                    nan_counter[j] = counter2[j];
+                }
+            }
+        }
+
         tmp2 = (double)fabs(tmp - avar->missing);
 
         if ((avar->nomissing == 0)
@@ -2849,6 +2873,61 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
             fdata_tmp[i] = (float)tmp;
         else if (mtype == 'd')
             data_tmp[i] = (double)tmp;
+
+    }
+    if (n_nan != 0) {
+        msg_len = 0;
+        for (j = 0; j < avar->ndims; j++) {
+            cmor_axis_t *pAxis;
+            pAxis = &cmor_axes[avar->axes_ids[j]];
+            double val = 0.f;
+            if (pAxis->values != NULL) {
+                val = pAxis->values[nan_counter[j]];
+            } else {
+                val = time_vals[nan_counter[j]];
+            }
+            msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                pAxis->id, nan_counter[j], val);
+        }
+        msg_len += 1;
+
+        msg_nan = (char *)malloc(msg_len * sizeof(char));
+        
+        msg_len = 0;
+        for (j = 0; j < avar->ndims; j++) {
+            cmor_axis_t *pAxis;
+            pAxis = &cmor_axes[avar->axes_ids[j]];
+            double val = 0.f;
+            if (pAxis->values != NULL) {
+                val = pAxis->values[nan_counter[j]];
+            } else {
+                val = time_vals[nan_counter[j]];
+            }
+            msg_len += sprintf(&msg_nan[msg_len], " %s: %lu/%.5g",
+                    pAxis->id, nan_counter[j], val);
+        }
+    
+        cmor_handle_error_variadic(
+            "Invalid value(s) detected for variable '%s' "
+            "(table: %s): %zu values were NaNs. "
+            "\n! "
+            "First encountered NaN "
+            "was at (axis: index/value):%s"
+            "\n!\n! "
+            "MIP data (missing values or otherwise) must "
+            "not include \"NaN's\". Please replace all \"NaN's\" "
+            "with an acceptable actual number.\n! If you consider "
+            "the \"NaN's\" to be missing, then replace them with "
+            "the official \"missing_value\", which for CMIP "
+            "floating point numbers is 1.e20.",
+            CMOR_CRITICAL,
+            avar->id,
+            cmor_tables[avar->ref_table_id].szTable_id,
+            n_nan, msg_nan);
+
+        free(msg_nan);
+        cmor_pop_traceback();
+        return (1);
 
     }
     if (n_lower_min != 0) {
@@ -3270,6 +3349,50 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                         avar->ntimes_written);
                 }
             }
+
+            avar->ntimes_written += ntimes_passed;
+
+            refaxis = &cmor_tables[cmor_axes[avar->axes_ids[0]].ref_table_id].axes[cmor_axes[avar->axes_ids[0]].ref_axis_id];
+
+            j = 0;
+            while (refaxis->units[j] == ' ')
+                j++;
+            i = 0;
+            while ((refaxis->units[i + j] != ' ') &&
+                    (refaxis->units[i + j] != '\0')) {
+                msg[i] = refaxis->units[i + j];
+                i++;
+            }
+            msg[i] = '\0';
+
+            snprintf(units, CMOR_MAX_STRING, "%lf %s", 
+                cmor_axes[avar->axes_ids[0]].approx_interval, msg);
+
+            time_axis_start = 0;
+            time_axis_count = avar->ntimes_written;
+            time_axis_vals = (double *)malloc(time_axis_count * sizeof(double));
+            ierr = nc_get_vara_double(ncid, avar->time_nc_id, &time_axis_start, &time_axis_count, time_axis_vals);
+            if (ierr != NC_NOERR) {
+                cmor_handle_error_variadic(
+                    "NetCDF Error (%i: %s), cannot read time values",
+                    CMOR_CRITICAL,
+                    ierr, nc_strerror(ierr)
+                );
+            }
+
+            if (time_axis_count > 0) {
+                ierr = cmor_check_interval(avar->axes_ids[0], units,
+                                            time_axis_vals,
+                                            time_axis_count, 0);
+                if (ierr != 0) {
+                    cmor_handle_error_variadic(
+                        "Error from time interval check",
+                        CMOR_CRITICAL
+                    );
+                }
+            }
+
+            free(time_axis_vals);
         } else {
 /* -------------------------------------------------------------------- */
 /*      Ok we did not pass time values therefore it means they were     */
@@ -3355,6 +3478,8 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                   cmor_axes[avar->axes_ids[0]].values[starts[0]];
             }
 
+            avar->ntimes_written += ntimes_passed;
+
             avar->last_time = cmor_axes[avar->axes_ids[0]].values[starts[0]
                                                                   + counts[0] -
                                                                   1];
@@ -3437,6 +3562,8 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     cmor_tables[avar->ref_table_id].szTable_id);
 
             }
+
+            avar->ntimes_written = cmor_axes[avar->axes_ids[0]].length;
 /* -------------------------------------------------------------------- */
 /*      ok now we need to store first and last stuff                    */
 /* -------------------------------------------------------------------- */
@@ -3474,8 +3601,6 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
             ierr, nc_strerror(ierr), avar->id,
             cmor_tables[avar->ref_table_id].szTable_id);
     }
-
-    avar->ntimes_written += ntimes_passed;
 
     if (mtype == 'd')
         free(data_tmp);

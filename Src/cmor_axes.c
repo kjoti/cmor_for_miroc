@@ -8,9 +8,11 @@
 
 int cuErrOpts = CU_VERBOSE;
 
-/************************************************************************/
-/*                         cmor_calendar_c2i()                          */
-/************************************************************************/
+/*****************************************************************************/
+/*                         cmor_calendar_c2i()                               */
+/* This function recognizes all valid calendars in the CF 1.12 release       */
+/* See https://cfconventions.org/cf-conventions/cf-conventions.html#calendar */
+/*****************************************************************************/
 int cmor_calendar_c2i(char *calendar, cdCalenType * ical)
 {
 
@@ -34,7 +36,21 @@ int cmor_calendar_c2i(char *calendar, cdCalenType * ical)
         *ical = cdJulian;
     else if (strcmp(calendar, "none") == 0)
         *ical = cdClim;
-    else {
+    else if (strcmp(calendar, "utc") == 0
+            || strcmp(calendar, "tai") == 0
+            || strcmp(calendar, "all_leap") == 0
+            || strcmp(calendar, "366_day") == 0) {
+        cmor_handle_error_variadic(
+            "A %s calendar is an invalid selection for Model Intercomparison Project (MIP) data."
+            "\n! "
+            "Please adopt a different, more common calendar used for climate studies. "
+            "\n!\n! "
+            "This function recognizes all valid calendars in the CF 1.12 release. "
+            "See https://cfconventions.org/cf-conventions/cf-conventions.html#calendar",
+            CMOR_NORMAL, calendar);
+        cmor_pop_traceback();
+        return (1);
+    } else {
         cmor_pop_traceback();
         return (1);
     }
@@ -1386,6 +1402,13 @@ int cmor_check_interval(int axis_id, char *interval, double *values,
     sprintf(msg, "seconds");
     ut_trim(msg, UT_ASCII);
     cmor_units = ut_parse(ut_read, msg, UT_ASCII);
+    if (ut_get_status() != UT_SUCCESS) {
+        cmor_handle_error_variadic(
+            "In udunuits parsing user units: %s, axis: %s (table: %s)",
+            CMOR_CRITICAL,
+            msg, cmor_axes[axis_id].id,
+            cmor_tables[cmor_axes[axis_id].ref_table_id].szTable_id);
+    }
     user_units = ut_parse(ut_read, ctmp2, UT_ASCII);
     if (ut_get_status() != UT_SUCCESS) {
         cmor_handle_error_variadic(
@@ -1505,7 +1528,7 @@ int cmor_check_interval(int axis_id, char *interval, double *values,
 /* more than 20% diff issues an error                                   */
 /* -------------------------------------------------------------------- */
 
-        if (tmp > cmor_axes[cmor_naxes].approx_interval_error) {
+        if (tmp > cmor_axes[axis_id].approx_interval_error) {
             if (isbounds == 1) {
                 cmor_handle_error_variadic(
                     "approximate time axis interval is defined as %f "
@@ -1526,7 +1549,7 @@ int cmor_check_interval(int axis_id, char *interval, double *values,
                     tmp * 100.);
             }
 
-        } else if (tmp > cmor_axes[cmor_naxes].approx_interval_warning) {
+        } else if (tmp > cmor_axes[axis_id].approx_interval_warning) {
 /* -------------------------------------------------------------------- */
 /*      more than 10% diff issues a warning                             */
 /* -------------------------------------------------------------------- */

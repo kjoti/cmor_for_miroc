@@ -801,7 +801,7 @@ void cmor_reset_variable(int var_id)
     cmor_vars[var_id].shuffle = 0;
     cmor_vars[var_id].deflate = 1;
     cmor_vars[var_id].deflate_level = 1;
-    cmor_vars[var_id].zstandard_level = 3;
+    cmor_vars[var_id].zstandard_level = -999999;
     cmor_vars[var_id].quantize_mode = NC_NOQUANTIZE;
     cmor_vars[var_id].quantize_nsd = 1;
     cmor_vars[var_id].nomissing = 1;
@@ -1245,13 +1245,20 @@ int cmor_setup(char *path,
     cmor_current_dataset.initiated = 0;
 
     for (i = 0; i < CMOR_MAX_GRIDS; i++) {
+        strncpy(cmor_grids[i].name, "", CMOR_MAX_STRING);
         strncpy(cmor_grids[i].mapping, "", CMOR_MAX_STRING);
         cmor_grids[i].ndims = 0;
         cmor_grids[i].nattributes = 0;
+        cmor_grids[i].ntextattributes = 0;
 
         for (j = 0; j < CMOR_MAX_GRID_ATTRIBUTES; j++) {
             cmor_grids[i].attributes_values[j] = 1.e20;
             cmor_grids[i].attributes_names[j][0] = '\0';
+            cmor_grids[i].text_attributes_names[j][0] = '\0';
+            if (cmor_grids[i].text_attributes_values[j] != NULL) {
+                free(cmor_grids[i].text_attributes_values[j]);
+                cmor_grids[i].text_attributes_values[j] = NULL;
+            }
         }
 
         if (cmor_grids[i].lats != NULL)
@@ -1289,7 +1296,9 @@ json_object *cmor_open_inpathFile(char *szFilename)
     char szFullName[CMOR_MAX_STRING];
     char *buffer;
     int nFileSize;
-    json_object *oJSON;
+    struct json_object *json_obj;
+    struct json_tokener *tok;
+    enum json_tokener_error jerr;
 
     cmor_add_traceback("cmor_open_inpathFile");
 
@@ -1357,14 +1366,41 @@ json_object *cmor_open_inpathFile(char *szFilename)
 /* -------------------------------------------------------------------- */
 /*     parse buffer into json object                                    */
 /* -------------------------------------------------------------------- */
-    oJSON = json_tokener_parse(buffer);
-    if (oJSON == NULL) {
+    tok = json_tokener_new();
+    if (tok == NULL) {
         cmor_handle_error_variadic(
-                 "Please validate JSON File!\n! "
-                 "USE: http://jsonlint.com/\n! "
-                 "Syntax Error in file: %s\n!  " "%s",
-                 CMOR_CRITICAL, szFullName, buffer);
+            "Could not set up json_tokener", 
+            CMOR_CRITICAL);
+        free(buffer);
+        cmor_pop_traceback();
+        return (NULL);
     }
+
+    json_tokener_set_flags(tok, JSON_TOKENER_STRICT);
+    json_obj = json_tokener_parse_ex(tok, buffer, nFileSize);
+
+    jerr = json_tokener_get_error(tok);
+    if (jerr != json_tokener_success)
+    {
+        free(buffer);
+        json_tokener_free(tok);
+        if (json_obj != NULL) {
+            json_object_put(json_obj);
+        }
+        cmor_handle_error_variadic(
+            "Your JSON file is invalid! "
+            "Please use https://jsonlint.com/ to validate your file.\n"
+            "!\n! "
+            "Syntax Error in input JSON: %s"
+            "!\n! "
+            "JSON error: %s", 
+            CMOR_CRITICAL,
+            szFilename,
+            json_tokener_error_desc(jerr));
+        cmor_pop_traceback();
+        return (NULL);
+    }
+
     cmor_pop_traceback();
     if (buffer != NULL) {
         free(buffer);
@@ -1373,7 +1409,8 @@ json_object *cmor_open_inpathFile(char *szFilename)
     if (table_file != NULL) {
         fclose(table_file);
     }
-    return (oJSON);
+    json_tokener_free(tok);
+    return (json_obj);
 }
 
 /************************************************************************/
@@ -2142,14 +2179,9 @@ int cmor_define_zfactors_vars(int var_id, int ncid, int *nc_dim,
                         icz =
                           cmor_tables[nTableID].vars[nTableID].zstandard_level;
 
-                        if (icd != 0) {
-                            ierr |= nc_def_var_deflate(ncid, nc_zfactors[lnzfactors],
-                                                    ics, icd, icdl);
-                        } else {
-                            ierr |= nc_def_var_deflate(ncid, nc_zfactors[lnzfactors],
-                                                    ics, 0, 0);
-                            ierr |= nc_def_var_zstandard(ncid, nc_zfactors[lnzfactors],
-                                                    icz);
+                        ierr |= nc_def_var_deflate(ncid, nc_zfactors[lnzfactors], ics, icd, icdl);
+                        if (icd == 0 && (icz >= -131072 && icz <= 22)) {
+                            ierr |= nc_def_var_zstandard(ncid, nc_zfactors[lnzfactors], icz);
                         }
 
                         if (ierr != NC_NOERR) {
@@ -3176,6 +3208,10 @@ int cmor_setGblAttr(int var_id)
         ierr += cmor_CV_setInstitution(cmor_tables[nVarRefTblID].CV);
     }
 
+    if (cmor_has_cur_dataset_attribute(GLOBAL_ATT_LICENSE_ID) == 0) {
+        ierr += cmor_CV_setLicense(cmor_tables[nVarRefTblID].CV);
+    }
+
     ierr += cmor_CV_checkFurtherInfoURL(nVarRefTblID);
 
     if (cmor_has_cur_dataset_attribute(GLOBAL_IS_CMIP6) == 0) {
@@ -3356,17 +3392,21 @@ void cmor_generate_uuid()
 /************************************************************************/
 void cmor_write_all_attributes(int ncid, int ncafid, int var_id)
 {
+    cmor_CV_def_t *required_attrs;
     int ierr;
     char msg[CMOR_MAX_STRING];
     char value[CMOR_MAX_STRING];
     double tmps[2];
-    int i;
+    int i, j;
     int nVarRefTblID;
     int itmp2;
     int rc;
 
     cmor_add_traceback("cmor_write_all_attributes");
     nVarRefTblID = cmor_vars[var_id].ref_table_id;
+
+    required_attrs = cmor_CV_rootsearch(cmor_tables[nVarRefTblID].CV,
+                                        CV_KEY_REQUIRED_GBL_ATTRS);
 
     qsort(cmor_current_dataset.attributes, cmor_current_dataset.nattributes,
           sizeof(struct attributes), cmor_attNameCmp);
@@ -3385,6 +3425,23 @@ void cmor_write_all_attributes(int ncid, int ncafid, int var_id)
         if (strcmp(cmor_current_dataset.attributes[i].names,
                    GLOBAL_ATT_TRACKING_PREFIX) == 0) {
             continue;
+        }
+/* -------------------------------------------------------------------- */
+/*  Skip license attributes if they are not required                    */
+/* -------------------------------------------------------------------- */
+        if (strcmp(cmor_current_dataset.attributes[i].names,
+                   GLOBAL_ATT_LICENSE_ID) == 0
+            || strcmp(cmor_current_dataset.attributes[i].names,
+                   GLOBAL_ATT_LICENSE_TYPE) == 0
+            || strcmp(cmor_current_dataset.attributes[i].names,
+                   GLOBAL_ATT_LICENSE_URL) == 0) {
+            for (j = 0; j < required_attrs->anElements; j++) {
+                if (strcmp(required_attrs->aszValue[j],
+                    cmor_current_dataset.attributes[i].names) == 0)
+                        break;
+            }
+            if (j == required_attrs->anElements)
+                continue;
         }
 /* -------------------------------------------------------------------- */
 /* Write license last, not now!!                                        */
@@ -3930,15 +3987,11 @@ void cmor_define_dimensions(int var_id, int ncid,
                 icdl = pVar->deflate_level;
                 icz = pVar->zstandard_level;
 
-                if (icd != 0) {
-                    ierr |= nc_def_var_deflate(ncafid, nc_bnds_vars[i],
-                                            ics, icd, icdl);
-                } else {
-                    ierr |= nc_def_var_deflate(ncafid, nc_bnds_vars[i],
-                                            ics, 0, 0);
-                    ierr |= nc_def_var_zstandard(ncafid, nc_bnds_vars[i],
-                                            icz);
+                ierr |= nc_def_var_deflate(ncafid, nc_bnds_vars[i], ics, icd, icdl);
+                if (icd == 0 && (icz >= -131072 && icz <= 22)) {
+                    ierr |= nc_def_var_zstandard(ncafid, nc_bnds_vars[i], icz);
                 }
+
                 if (ierr != NC_NOERR) {
                     cmor_handle_error_var_variadic(
                         "NCError (%i: %s) defining compression\n! "
@@ -4201,7 +4254,7 @@ int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
 /*      first of all checks for grid_mapping                            */
 /* -------------------------------------------------------------------- */
 
-    if (strcmp(cmor_grids[nGridID].mapping, "") != 0) {
+    if (strcmp(cmor_grids[nGridID].name, "") != 0) {
 /* -------------------------------------------------------------------- */
 /*      ok we need to create this dummy variable                        */
 /*      that contains all the info                                      */
@@ -4209,9 +4262,9 @@ int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
 
         cmor_set_variable_attribute_internal(var_id,
                                              VARIALBE_ATT_GRIDMAPPING,
-                                             'c', cmor_grids[nGridID].mapping);
+                                             'c', cmor_grids[nGridID].name);
 
-        ierr = nc_def_var(ncafid, cmor_grids[nGridID].mapping, NC_INT, 0,
+        ierr = nc_def_var(ncafid, cmor_grids[nGridID].name, NC_INT, 0,
                           &nc_dims_associated[0], &m);
 
         if (ierr != NC_NOERR) {
@@ -4221,7 +4274,7 @@ int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
                 "variable %s (table: %s)",
                 CMOR_CRITICAL, var_id,
                 ierr, nc_strerror(ierr),
-                cmor_grids[nGridID].mapping, cmor_vars[var_id].id,
+                cmor_grids[nGridID].name, cmor_vars[var_id].id,
                 cmor_tables[nVarRefTblID].szTable_id);
         }
 /* -------------------------------------------------------------------- */
@@ -4273,8 +4326,15 @@ int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
                                                  'd',
                                                  cmor_grids
                                                  [nGridID].attributes_values[k],
-                                                 cmor_grids[nGridID].mapping);
+                                                 cmor_grids[nGridID].name);
             }
+        }
+
+        for (k = 0; k < cmor_grids[cmor_vars[var_id].grid_id].ntextattributes; k++) {
+            ierr = cmor_put_nc_char_attribute(ncafid, m,
+                                              cmor_grids[nGridID].text_attributes_names[k],
+                                              cmor_grids[nGridID].text_attributes_values[k],
+                                              cmor_vars[var_id].id);
         }
     }
 /* -------------------------------------------------------------------- */
@@ -4470,15 +4530,11 @@ int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
                                                                   ref_var_id].
                       zstandard_level;
 
-                    if (icd != 0) {
-                        ierr |= nc_def_var_deflate(ncafid, nc_associated_vars[i],
-                                                ics, icd, icdl);
-                    } else {
-                        ierr |= nc_def_var_deflate(ncafid, nc_associated_vars[i],
-                                                ics, 0, 0);
-                        ierr |= nc_def_var_zstandard(ncafid, nc_associated_vars[i],
-                                                icz);
+                    ierr |= nc_def_var_deflate(ncafid, nc_associated_vars[i], ics, icd, icdl);
+                    if (icd == 0 && (icz >= -131072 && icz <= 22)) {
+                        ierr |= nc_def_var_zstandard(ncafid, nc_associated_vars[i], icz);
                     }
+
                     if (ierr != NC_NOERR) {
                         cmor_handle_error_var_variadic(
                             "NetCDF Error (%i: %s) defining\n! "
@@ -5460,11 +5516,8 @@ void cmor_create_var_attributes(int var_id, int ncid, int ncafid,
             }
         }
 
-        // Only use zstandard compression if deflate is disabled
-        if (icd != 0) {
-            ierr |= nc_def_var_deflate(ncid, pVar->nc_var_id, ics, icd, icdl);
-        } else {
-            ierr |= nc_def_var_deflate(ncid, pVar->nc_var_id, ics, 0, 0);
+        ierr |= nc_def_var_deflate(ncid, pVar->nc_var_id, ics, icd, icdl);
+        if (icd == 0 && (icz >= -131072 && icz <= 22)) {
             ierr |= nc_def_var_zstandard(ncid, pVar->nc_var_id, icz);
         }
 
@@ -6145,7 +6198,10 @@ int cmor_CreateFromTemplate(int nVarRefTblID, char *templateSTH,
 /*      or an internal attribute.  Otherwise we just skip it and the    */
 /*      user get a warning.                                             */
 /* -------------------------------------------------------------------- */
-        } else if (strcmp(szToken, GLOBAL_ATT_CONVENTIONS) == 0) {
+        } else if (strcmp(szToken, GLOBAL_ATT_CONVENTIONS) == 0
+                    || strcmp(szToken, GLOBAL_ATT_LICENSE_ID) == 0
+                    || strcmp(szToken, GLOBAL_ATT_LICENSE_TYPE) == 0
+                    || strcmp(szToken, GLOBAL_ATT_LICENSE_URL) == 0) {
             cmor_get_cur_dataset_attribute(szToken, tmp);
             strncat(szJoin, tmp, CMOR_MAX_STRING);
             strcat(szJoin, separator);
@@ -6954,6 +7010,13 @@ int cmor_close(void)
             }
         }
 
+    }
+
+    for (j = 0; j < CMOR_MAX_GRID_ATTRIBUTES; j++) {
+        if (cmor_grids[i].text_attributes_values[j] != NULL) {
+            free(cmor_grids[i].text_attributes_values[j]);
+            cmor_grids[i].text_attributes_values[j] = NULL;
+        }
     }
 
     for (i = 0; i < CMOR_MAX_GRIDS; i++) {

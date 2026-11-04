@@ -81,7 +81,7 @@ void cmor_init_table(cmor_table_t * table, int id)
     table->nexps = -1;
     table->nmappings = -1;
     table->cf_version = 1.7;
-    table->cmor_version = 3.0;
+    table->cmor_version[0] = '\0';
     table->mip_era[0] = '\0';
     table->szTable_id[0] = '\0';
     table->realm[0] = '\0';
@@ -376,9 +376,10 @@ int cmor_set_dataset_att(cmor_table_t * table, char att[CMOR_MAX_STRING],
                          char val[CMOR_MAX_STRING])
 {
     int n, i, j;
-    float d, d2;
+    int version_major, version_minor;
     char value[CMOR_MAX_STRING];
     char value2[CMOR_MAX_STRING];
+    char *token;
     extern int cmor_ntables;
 
     cmor_add_traceback("cmor_set_dataset_att");
@@ -392,25 +393,30 @@ int cmor_set_dataset_att(cmor_table_t * table, char att[CMOR_MAX_STRING],
 /*      Read non-block metadata.                                        */
 /* -------------------------------------------------------------------- */
     if (strcmp(att, TABLE_HEADER_VERSION) == 0) {
-        d2 = CMOR_VERSION_MAJOR;
-        d = CMOR_VERSION_MINOR;
-        while (d > 1.)
-            d /= 10.;
-        d2 += d;
-        sscanf(value, "%f", &d);
-        if (d > d2) {
+        version_major = 0;
+        version_minor = 0;
+        strcpy(value2, value);
+        token = strtok(value2, ".");
+        if (token != NULL)
+            sscanf(token, "%d", &version_major);
+            token = strtok(NULL, ".");
+            if (token != NULL)
+                sscanf(token, "%d", &version_minor);
+        if (version_major > CMOR_VERSION_MAJOR
+            || (CMOR_VERSION_MAJOR == version_major 
+                && version_minor > CMOR_VERSION_MINOR)) {
             cmor_handle_error_variadic(
-                "Table %s is defined for cmor_version %f, "
-                "this library version is: %i.%i.%i, %f",
+                "Table %s is defined for cmor_version %s, "
+                "this library version is: %i.%i.%i",
                 CMOR_CRITICAL,
-                table->szTable_id, d,
+                table->szTable_id, value,
                 CMOR_VERSION_MAJOR, CMOR_VERSION_MINOR,
-                CMOR_VERSION_PATCH, d2);
+                CMOR_VERSION_PATCH);
             cmor_ntables--;
             cmor_pop_traceback();
             return (1);
         }
-        table->cmor_version = d;
+        strcpy(table->cmor_version, value);
 
     } else if (strcmp(att, TABLE_HEADER_GENERIC_LEVS) == 0) {
         n = 0;
@@ -776,7 +782,9 @@ int cmor_load_table_internal(char szTable[CMOR_MAX_STRING], int *table_id)
     char szVal[1024000];
     char *buffer = NULL;
     int nTableSize, read_size;
-    json_object *json_obj;
+    struct json_object *json_obj;
+    struct json_tokener *tok;
+    enum json_tokener_error jerr;
 
     cmor_add_traceback("cmor_load_table_internal");
     cmor_is_setup();
@@ -851,14 +859,37 @@ int cmor_load_table_internal(char szTable[CMOR_MAX_STRING], int *table_id)
 /* -------------------------------------------------------------------- */
 /*     parse buffer into json object                                    */
 /* -------------------------------------------------------------------- */
-    json_obj = json_tokener_parse(buffer);
-    if (json_obj == NULL) {
+    tok = json_tokener_new();
+    if (tok == NULL) {
         cmor_handle_error_variadic(
-            "Please validate JSON File!\n"
-            "USE: http://jsonlint.com/\n"
-            "Syntax Error in table: %s\n " "%s", 
+            "Could not set up json_tokener", 
+            CMOR_CRITICAL);
+        free(buffer);
+        cmor_pop_traceback();
+        return (TABLE_ERROR);
+    }
+
+    json_tokener_set_flags(tok, JSON_TOKENER_STRICT);
+    json_obj = json_tokener_parse_ex(tok, buffer, nTableSize);
+
+    jerr = json_tokener_get_error(tok);
+    if (jerr != json_tokener_success)
+    {
+        free(buffer);
+        json_tokener_free(tok);
+        if (json_obj != NULL) {
+            json_object_put(json_obj);
+        }
+        cmor_handle_error_variadic(
+            "Your JSON file is invalid! "
+            "Please use https://jsonlint.com/ to validate your file.\n"
+            "!\n! "
+            "Syntax Error in table: %s"
+            "!\n! "
+            "JSON error: %s", 
             CMOR_CRITICAL,
-            szTable, buffer);
+            szTable,
+            json_tokener_error_desc(jerr));
         cmor_pop_traceback();
         return (TABLE_ERROR);
     }
@@ -1098,6 +1129,7 @@ int cmor_load_table_internal(char szTable[CMOR_MAX_STRING], int *table_id)
     }
     cmor_pop_traceback();
     free(buffer);
+    json_tokener_free(tok);
     json_object_put(json_obj);
     return (TABLE_SUCCESS);
 }
