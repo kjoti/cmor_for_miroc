@@ -238,6 +238,10 @@ test_python: python
 	env TEST_NAME=Test/test_cmor_unsupported_calendar.py make test_a_python
 	env TEST_NAME=Test/test_cmor_time_interval_check.py make test_a_python
 	env TEST_NAME=Test/test_cmor_license_attributes.py make test_a_python
+	env TEST_NAME=Test/test_cmor_nested_cv_attribute.py make test_a_python
+	env TEST_NAME=Test/test_cmor_path_and_file_templates.py make test_a_python
+	env TEST_NAME=Test/test_cmor_check_cv_structure.py make test_a_python
+	env TEST_NAME=Test/test_cmor_time_value_and_bounds_mismatch.py make test_a_python
 test_cmip6_cv: python
 	env TEST_NAME=Test/test_python_CMIP6_CV_sub_experimentnotset.py make test_a_python
 	env TEST_NAME=Test/test_python_CMIP6_CV_sub_experimentbad.py make test_a_python
@@ -314,11 +318,6 @@ test_fortran: cmor
 	env TEST_NAME="test_fortran_example_00" INPUT_FILE="Test/noinput" make test_case
 	env TEST_NAME="test_fortran_example_01" INPUT_FILE="Test/noinput" make test_case
 	env TEST_NAME="test_station_data" INPUT_FILE="Test/noinput" make test_case
-	# env TEST_NAME="test_cmor_grid_alejandro" INPUT_FILE="Test/alejandro.txt" make test_case
-	# env TEST_NAME="test_cmor_grid_alejandro" INPUT_FILE="Test/alejandro_1.txt" make test_case
-	# env TEST_NAME="test_cmor_grid_alejandro" INPUT_FILE="Test/alejandro_2.txt" make test_case
-	# env TEST_NAME="test_cmor_grid_time_varying" INPUT_FILE="Test/alejandro.txt" make test_case
-	# env TEST_NAME="test_cmor_grid_time_varying" INPUT_FILE="Test/alejandro_1.txt" make test_case
 	env TEST_NAME="test_region" INPUT_FILE="Test/noinput" make test_case
 	env TEST_NAME="test_sigma" INPUT_FILE="Test/noinput" make test_case
 	env TEST_NAME="test_singleton" INPUT_FILE="Test/noinput" make test_case

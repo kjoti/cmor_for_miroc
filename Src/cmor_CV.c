@@ -2353,6 +2353,7 @@ int cmor_CV_checkGrids(cmor_CV_def_t * CV)
     cmor_CV_def_t *CV_grid_labels;
     cmor_CV_def_t *CV_grid_resolution;
     cmor_CV_def_t *CV_grid_child;
+    cmor_CV_def_t *CV_grid_res_child;
     int i;
 
     cmor_add_traceback("_CV_checkGrids");
@@ -2413,6 +2414,7 @@ int cmor_CV_checkGrids(cmor_CV_def_t * CV)
             return (-1);
         }
     }
+
     CV_grid_resolution = cmor_CV_rootsearch(CV, CV_KEY_GRID_RESOLUTION);
     if (CV_grid_resolution == NULL) {
         cmor_handle_error_variadic(
@@ -2422,7 +2424,6 @@ int cmor_CV_checkGrids(cmor_CV_def_t * CV)
         return (-1);
 
     }
-
     if (CV_grid_resolution->anElements > 0) {
         for (i = 0; i < CV_grid_resolution->anElements; i++) {
             strncpy(szCompare, CV_grid_resolution->aszValue[i],
@@ -2448,6 +2449,16 @@ int cmor_CV_checkGrids(cmor_CV_def_t * CV)
             return (-1);
 
         }
+    } else {
+        CV_grid_res_child = cmor_CV_search_child_key(CV_grid_resolution, szGridResolution);
+        if (CV_grid_res_child == NULL) {
+            cmor_handle_error_variadic(
+                    "Your attribute grid_resolution is set to \"%s\" which is invalid."
+                            "\n! \n! Check your Controlled Vocabulary file \"%s\".\n! ",
+                    CMOR_NORMAL, szGridResolution, CV_Filename);
+            cmor_pop_traceback();
+            return (-1);
+        }
     }
 
     cmor_pop_traceback();
@@ -2467,6 +2478,20 @@ int cmor_CV_checkGblAttributes(cmor_CV_def_t * CV)
     cmor_add_traceback("_CV_checkGblAttributes");
     required_attrs = cmor_CV_rootsearch(CV, CV_KEY_REQUIRED_GBL_ATTRS);
     if (required_attrs != NULL) {
+        // First, validate required attributes that are set by the user.
+        // This will also set any attributes in the controlled vocabulary
+        // that are dependent on user input and only have one value.
+        for (i = 0; i < required_attrs->anElements; i++) {
+            if (cmor_has_cur_dataset_attribute(required_attrs->aszValue[i]) == 0) {
+                rc = cmor_CV_ValidateAttribute(CV, required_attrs->aszValue[i]);
+                if (rc != 0) {
+                    bCriticalError = 1;
+                    ierr += -1;
+                }
+            }
+        }
+        // Check that all required attributes are set, including those set by 
+        // cmor_CV_ValidateAttribute in the above loop.
         for (i = 0; i < required_attrs->anElements; i++) {
             rc = cmor_has_cur_dataset_attribute(required_attrs->aszValue[i]);
             if (rc != 0) {

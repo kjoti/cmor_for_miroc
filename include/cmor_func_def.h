@@ -190,6 +190,10 @@ extern int cmor_treat_axis_values( int axis_id, double *values, int length,
 extern int cmor_check_interval( int axis_id, char *interval,
 				double *values, int nvalues,
 				int isbounds );
+extern void cmor_values_from_bounds(double *bounds, 
+				double *values_from_user,
+				double *values_from_bounds, int length,
+				char *name);
 extern int cmor_axis( int *axis_id, char *name, char *units, int length,
 		      void *coord_vals, char type, void *cell_bounds,
 		      int cell_bounds_ndim, char *interval );
@@ -306,20 +310,17 @@ extern int cmor_set_formula_entry(cmor_table_t* table,
 extern int cmor_set_table( int table );
 extern int cmor_load_table( char table[CMOR_MAX_STRING], int *table_id );
 extern int cmor_load_table_internal( char table[CMOR_MAX_STRING],
-                                     int *table_id );
+                                     int *table_id,
+                                     enum cmor_table_type table_type);
 extern int cmor_search_table( char szTable[CMOR_MAX_STRING],
 								int *table_id);
 extern int cmor_validate_json(json_object *json);
+extern void cmor_validate_cv(json_object *json, char *parent_attr);
 
 extern json_object *cmor_open_inpathFile( char *szFilename);
 
 extern int cmor_load_ressources( char *szFilename );
 
-extern int cmor_time_varying_grid_coordinate( int *coord_grid_id,
-					      int grid_id, char *name,
-					      char *units, char type,
-					      void *missing,
-					      int *coordinate_type );
 extern void cmor_cat_unique_string( char *dest, char *src );
 extern int cmor_stringinstring( char *dest, char *src );
 extern void cmor_checkMissing(int varid, int var_id, char type);

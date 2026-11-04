@@ -2,10 +2,12 @@ import cmor
 import unittest
 import numpy as np
 from netCDF4 import Dataset
-from test_python_common import *
+from base_CMIP6_CV import BaseCVsTest
+from test_python_common import gen_irreg_grid, read_2d_input_files, \
+                               Time, bnds_time, varin2d, lat, lon
 
 
-class TestCRS(unittest.TestCase):
+class TestCRS(BaseCVsTest):
 
     def make_crs_file(self, crs_wkt=None):
         cmor.setup(inpath='cmip6-cmor-tables/Tables',
@@ -140,7 +142,7 @@ class TestCRS(unittest.TestCase):
         ds.close()
 
 
-class TestLatLonGridMapping(unittest.TestCase):
+class TestLatLonGridMapping(BaseCVsTest):
 
     def test_latitude_longitude_grid_mapping(self):
         crs_wkt = \
@@ -191,6 +193,7 @@ class TestLatLonGridMapping(unittest.TestCase):
         nlat = 10
         nlon = 20
         lon_coords = np.arange(-120., -120. + 1.*nlon, 1.) + 0.5
+        lon_coords = lon_coords % 360.
         lat_coords = np.arange(60., 60 + 1.*nlat, 1.) + 0.5
         lon_bounds = np.zeros((lon_coords.shape[0], 2))
         lon_bounds[:, 0] = lon_coords - 0.5
@@ -260,6 +263,224 @@ class TestLatLonGridMapping(unittest.TestCase):
             self.assertEqual(val, attr_val)
         
         ds.close()
+
+
+class TestStandardParallel(BaseCVsTest):
+
+    def test_grid_mapping_without_standard_parallel(self):
+        cmor.setup(inpath='cmip6-cmor-tables/Tables',
+                   netcdf_file_action=cmor.CMOR_REPLACE,
+                   logfile=self.tmpfile)
+        cmor.dataset_json("Test/CMOR_input_example.json")
+
+        grid_table = cmor.load_table("Tables/CMIP6_grids.json")
+
+        cmor.set_table(grid_table)
+
+        x, y, lon_coords, lat_coords, lon_vertices, lat_vertices \
+            = gen_irreg_grid(lon, lat)
+
+        axes = [
+                {
+                    'table_entry': 'y',
+                    'units': 'm',
+                    'coord_vals': y
+                },
+                {
+                    'table_entry': 'x',
+                    'units': 'm',
+                    'coord_vals': x
+                }
+            ]
+
+        axis_ids = [cmor.axis(**axis) for axis in axes]
+
+        grid_id = cmor.grid(axis_ids=axis_ids,
+                            latitude=lat_coords,
+                            longitude=lon_coords,
+                            latitude_vertices=lat_vertices,
+                            longitude_vertices=lon_vertices)
+        axis_ids.append(grid_id)
+
+        mapnm = 'lambert_conformal_conic'
+        params = ["longitude_of_central_meridian",
+                  "latitude_of_projection_origin",
+                  "false_easting",
+                  "false_northing"]
+        punits = ["", "", "", ""]
+        pvalues = [175., 13., 8., 0.]
+
+        cmor.set_crs(grid_id=grid_id,
+                     mapping_name=mapnm,
+                     parameter_names=params,
+                     parameter_values=pvalues,
+                     parameter_units=punits)
+
+        self.assertCV(
+            ("you should consider setting standard_parallel for one value "
+             "or standard_parallel1 and standard_parallel2 for two values"),
+            ("Warning: Grid mapping attribute standard_parallel "
+             "has not been set, ")
+        )
+
+
+class TestPolarStereographicAttributeOptions(BaseCVsTest):
+
+    def setUp(self, *args, **kwargs):
+
+        # Create x and y coordinates and bounds.
+        coord_vals = np.arange(-533750.0, 533750.0 + 2500.0,
+                               2500.0, np.float32)
+        coord_bnds = np.zeros((coord_vals.shape[0], 2), np.float32)
+
+        coord_bnds[:, 0] = coord_vals - 1250.0
+        coord_bnds[:, 1] = coord_vals + 1250.0
+
+        # Create longitude and latitude fields for a
+        # polar stereographic projection.
+        xgrid, ygrid = np.broadcast_arrays(
+            np.expand_dims(
+                coord_vals, 0), np.expand_dims(
+                coord_vals, 1))
+
+        rhogrid = np.sqrt(xgrid**2 + ygrid**2)
+        cgrid = 2.0 * np.arctan((0.5 / 6378137.0) * rhogrid)
+        self.lat_grid = (180.0 / 3.141592654) * np.arcsin(np.cos(cgrid))
+        self.lon_grid = (180.0 / 3.141592654) * np.arctan2(xgrid, -ygrid)
+
+        self.axes = [
+                {
+                    'table_entry': 'y',
+                    'units': 'm',
+                    'coord_vals': coord_vals,
+                    'cell_bounds': coord_bnds
+                },
+                {
+                    'table_entry': 'x',
+                    'units': 'm',
+                    'coord_vals': coord_vals,
+                    'cell_bounds': coord_bnds
+                }
+            ]
+
+        return super().setUp(*args, **kwargs)
+
+    def test_polar_stereographic_without_attribute_options(self):
+
+        cmor.setup(inpath='cmip6-cmor-tables/Tables',
+                   netcdf_file_action=cmor.CMOR_REPLACE,
+                   logfile=self.tmpfile)
+        cmor.dataset_json("Test/CMOR_input_example.json")
+
+        grid_table = cmor.load_table("Tables/CMIP6_grids.json")
+
+        cmor.set_table(grid_table)
+
+        axis_ids = [cmor.axis(**axis) for axis in self.axes]
+
+        grid_id = cmor.grid(axis_ids=axis_ids,
+                            latitude=self.lat_grid,
+                            longitude=self.lon_grid)
+        axis_ids.append(grid_id)
+
+        mapnm = 'polar_stereographic'
+        param_dict = {
+            'latitude_of_projection_origin': [90.0, 'degrees_north'],
+            'longitude_of_projection_origin': [135.0, 'degrees_east'],
+            'false_northing': [0.0, 'meters'],
+            'false_easting': [0.0, 'meters']
+        }
+
+        cmor.set_crs(grid_id=grid_id,
+                     mapping_name=mapnm,
+                     parameter_names=param_dict)
+
+        self.assertCV(
+            ("You should consider setting one of the attributes"),
+            ("Warning: Grid mapping attributes standard_parallel or "
+             "scale_factor_at_projection_origin were not set for "
+             f"grid mapping {mapnm}. ")
+        )
+
+    def test_polar_stereographic_with_both_attribute_options(self):
+
+        cmor.setup(inpath='cmip6-cmor-tables/Tables',
+                   netcdf_file_action=cmor.CMOR_REPLACE,
+                   logfile=self.tmpfile)
+        cmor.dataset_json("Test/CMOR_input_example.json")
+
+        grid_table = cmor.load_table("Tables/CMIP6_grids.json")
+
+        cmor.set_table(grid_table)
+
+        axis_ids = [cmor.axis(**axis) for axis in self.axes]
+
+        grid_id = cmor.grid(axis_ids=axis_ids,
+                            latitude=self.lat_grid,
+                            longitude=self.lon_grid)
+        axis_ids.append(grid_id)
+
+        mapnm = 'polar_stereographic'
+        param_dict = {
+            'latitude_of_projection_origin': [90.0, 'degrees_north'],
+            'longitude_of_projection_origin': [135.0, 'degrees_east'],
+            'standard_parallel': [70.0, 'degrees_north'],
+            'scale_factor_at_projection_origin': [1.0, 'm'],
+            'false_northing': [0.0, 'meters'],
+            'false_easting': [0.0, 'meters']
+        }
+
+        cmor.set_crs(grid_id=grid_id,
+                     mapping_name=mapnm,
+                     parameter_names=param_dict)
+
+        self.assertCV(
+            ("You should consider setting only one of the attributes"),
+            ("Warning: Both grid mapping attributes standard_parallel and "
+             "scale_factor_at_projection_origin were set for "
+             f"grid mapping {mapnm}. ")
+        )
+
+    def test_polar_stereographic_attribute_with_wrong_units(self):
+
+        cmor.setup(inpath='cmip6-cmor-tables/Tables',
+                   netcdf_file_action=cmor.CMOR_REPLACE,
+                   logfile=self.tmpfile)
+        cmor.dataset_json("Test/CMOR_input_example.json")
+
+        grid_table = cmor.load_table("Tables/CMIP6_grids.json")
+
+        cmor.set_table(grid_table)
+
+        axis_ids = [cmor.axis(**axis) for axis in self.axes]
+
+        grid_id = cmor.grid(axis_ids=axis_ids,
+                            latitude=self.lat_grid,
+                            longitude=self.lon_grid)
+        axis_ids.append(grid_id)
+
+        mapnm = 'polar_stereographic'
+        param_dict = {
+            'latitude_of_projection_origin': [90.0, 'degrees_north'],
+            'longitude_of_projection_origin': [135.0, 'degrees_east'],
+            'scale_factor_at_projection_origin': [1.0, 'xyz'],
+            'false_northing': [0.0, 'meters'],
+            'false_easting': [0.0, 'meters']
+        }
+
+        with self.assertRaises(cmor.CMORError):
+            _ = cmor.set_crs(grid_id=grid_id,
+                             mapping_name=mapnm,
+                             parameter_names=param_dict)
+
+        self.assertCV(
+            "(xyz)",
+            "Error: Udunits: analyzing units from cmor "
+        )
+        self.assertCV(
+            "xyz and m",
+            "Error: Udunits: Error preparing units "
+        )
 
 
 if __name__ == '__main__':

@@ -2368,7 +2368,7 @@ int cmor_set_chunking(int var_id, int nTableID, size_t nc_dim_chunking[])
 /************************************************************************/
 int cmor_set_deflate(int var_id, int shuffle, int deflate, int deflate_level)
 {
-    cmor_add_traceback("cmor_get_original_shape");
+    cmor_add_traceback("cmor_set_deflate");
     cmor_is_setup();
 
     if (cmor_vars[var_id].self != var_id) {
@@ -2529,7 +2529,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
     char msg[CMOR_MAX_STRING];
     char msg2[CMOR_MAX_STRING];
     char units[CMOR_MAX_STRING];
-    double *tmp_vals;
+    double *tmp_bnds, *tmp_time;
     ut_unit *user_units = NULL, *cmor_units = NULL;
     cv_converter *ut_cmor_converter = NULL;
     char local_unit[CMOR_MAX_STRING];
@@ -2541,6 +2541,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
     char *msg_min;
     char *msg_max;
     char *msg_nan;
+    char *msg_start;
     size_t msg_len;
     cmor_axis_def_t *refaxis;
     size_t time_axis_start, time_axis_count;
@@ -2880,14 +2881,20 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.f;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[nan_counter[j]];
-            } else {
-                val = time_vals[nan_counter[j]];
+            loc = nan_counter[j];
+            if (pAxis->cvalues != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%s",
+                                    pAxis->id, loc,
+                                    pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    time_vals[loc]);
             }
-            msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
-                                pAxis->id, nan_counter[j], val);
         }
         msg_len += 1;
 
@@ -2897,14 +2904,21 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.f;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[nan_counter[j]];
-            } else {
-                val = time_vals[nan_counter[j]];
+            loc = nan_counter[j];
+            msg_start = &msg_nan[msg_len];
+            if (pAxis->cvalues != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%s",
+                                   pAxis->id, loc,
+                                   pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                   pAxis->id, loc,
+                                   pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                   pAxis->id, loc,
+                                   time_vals[loc]);
             }
-            msg_len += sprintf(&msg_nan[msg_len], " %s: %lu/%.5g",
-                    pAxis->id, nan_counter[j], val);
         }
     
         cmor_handle_error_variadic(
@@ -2935,14 +2949,20 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.f;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[min_counter[j]];
-            } else {
-                val = time_vals[min_counter[j]];
+            loc = min_counter[j];
+            if (pAxis->cvalues != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%s",
+                                    pAxis->id, loc,
+                                    pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    time_vals[loc]);
             }
-            msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
-                                pAxis->id, min_counter[j], val);
         }
         msg_len += 1;
 
@@ -2952,14 +2972,21 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.f;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[min_counter[j]];
-            } else {
-                val = time_vals[min_counter[j]];
+            loc = min_counter[j];
+            msg_start = &msg_min[msg_len];
+            if (pAxis->cvalues != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%s",
+                                    pAxis->id, loc,
+                                    pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    time_vals[loc]);
             }
-            msg_len += sprintf(&msg_min[msg_len], " %s: %lu/%.5g",
-                    pAxis->id, min_counter[j], val);
         }
     
         cmor_handle_error_variadic(
@@ -2970,7 +2997,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
             CMOR_WARNING,
             avar->id,
             cmor_tables[avar->ref_table_id].szTable_id,
-            n_lower_min, avar->valid_max, emin, msg_min);
+            n_lower_min, avar->valid_min, emin, msg_min);
 
         free(msg_min);
 
@@ -2980,14 +3007,20 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[max_counter[j]];
-            } else {
-                val = time_vals[max_counter[j]];
+            loc = max_counter[j];
+            if (pAxis->cvalues != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%s",
+                                    pAxis->id, loc,
+                                    pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    time_vals[loc]);
             }
-            msg_len += snprintf(NULL, 0, " %s: %lu/%.5g",
-                                pAxis->id, max_counter[j], val);
         }
         msg_len += 1;
 
@@ -2997,14 +3030,21 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
         for (j = 0; j < avar->ndims; j++) {
             cmor_axis_t *pAxis;
             pAxis = &cmor_axes[avar->axes_ids[j]];
-            double val = 0.;
-            if (pAxis->values != NULL) {
-                val = pAxis->values[max_counter[j]];
-            } else {
-                val = time_vals[max_counter[j]];
+            loc = max_counter[j];
+            msg_start = &msg_max[msg_len];
+            if (pAxis->cvalues != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%s",
+                                    pAxis->id, loc,
+                                    pAxis->cvalues[loc]);
+            } else if (pAxis->values != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    pAxis->values[loc]);
+            } else if (pAxis->axis == 'T' && time_vals != NULL) {
+                msg_len += sprintf(msg_start, " %s: %lu/%.5g",
+                                    pAxis->id, loc,
+                                    time_vals[loc]);
             }
-            msg_len += sprintf(&msg_max[msg_len], " %s: %lu/%.5g",
-                    pAxis->id, max_counter[j], val);
         }
     
         cmor_handle_error_variadic(
@@ -3134,8 +3174,10 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                 cmor_get_axis_attribute(avar->axes_ids[0], "units", 'c', &msg);
                 cmor_get_cur_dataset_attribute("calendar", msg2);
 
-                tmp_vals = malloc((ntimes_passed + 1) * 2 * sizeof(double));
-                if (tmp_vals == NULL) {
+                tmp_bnds = malloc((ntimes_passed + 1) * 2 * sizeof(double));
+                tmp_time = (double *)malloc(ntimes_passed * sizeof(double));
+
+                if (tmp_bnds == NULL) {
                     cmor_handle_error_variadic(
                         "cannot malloc %i tmp bounds time vals "
                         "for variable '%s' (table: %s)",
@@ -3147,7 +3189,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     if ((avar->last_time != -999.)
                         && (avar->last_bound != 1.e20)) {
                         tmpindex = 1;
-                        tmp_vals[0] = avar->last_time;
+                        tmp_bnds[0] = avar->last_time;
                     } else {
                         tmpindex = 0;
                     }
@@ -3155,12 +3197,12 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     tmpindex = 0;
                 }
                 ierr = cmor_convert_time_values(time_vals, 'd', ntimes_passed,
-                                                &tmp_vals[tmpindex],
+                                                &tmp_bnds[tmpindex],
                                                 cmor_axes[avar->
                                                           axes_ids[0]].iunits,
                                                 msg, msg2, msg2);
 
-                ierr = cmor_check_monotonic(&tmp_vals[0],
+                ierr = cmor_check_monotonic(&tmp_bnds[0],
                                             ntimes_passed + tmpindex, "time", 0,
                                             avar->axes_ids[0]);
 
@@ -3169,19 +3211,19 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     if ((avar->last_time != -999.)
                         && (avar->last_bound != 1.e20)) {
 
-                        tmp_vals[0] = 2 * avar->last_time - avar->last_bound;
-                        tmp_vals[1] = avar->last_bound;
+                        tmp_bnds[0] = 2 * avar->last_time - avar->last_bound;
+                        tmp_bnds[1] = avar->last_bound;
                     }
                 }
 
                 ierr = cmor_convert_time_values(time_bounds, 'd',
                                                 ntimes_passed * 2,
-                                                &tmp_vals[2 * tmpindex],
+                                                &tmp_bnds[2 * tmpindex],
                                                 cmor_axes[avar->
                                                           axes_ids[0]].iunits,
                                                 msg, msg2, msg2);
 
-                        ierr = cmor_check_monotonic(&tmp_vals[0],
+                        ierr = cmor_check_monotonic(&tmp_bnds[0],
                             (ntimes_passed + tmpindex) * 2,
                             "time", 1, avar->axes_ids[0]);
 
@@ -3190,7 +3232,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                                                        ntimes_passed, "time");
 
                 ierr = nc_put_vara_double(ncid, avar->time_bnds_nc_id, starts,
-                                          counts2, &tmp_vals[2 * tmpindex]);
+                                          counts2, &tmp_bnds[2 * tmpindex]);
 
                 if (ierr != NC_NOERR) {
                     cmor_handle_error_variadic(
@@ -3207,49 +3249,51 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
 /*      Ok first time we're putting data  in                            */
 /* -------------------------------------------------------------------- */
 
-                    avar->first_bound = tmp_vals[0];
+                    avar->first_bound = tmp_bnds[0];
                 } else {
 /* -------------------------------------------------------------------- */
 /*      ok let's put the bounds back on "normal" (start at 0) indices   */
 /* -------------------------------------------------------------------- */
 
                     for (i = 0; i < 2 * ntimes_passed; i++) {
-                        tmp_vals[i] = tmp_vals[i + 2];
+                        tmp_bnds[i] = tmp_bnds[i + 2];
                     }
                 }
-                avar->last_bound = tmp_vals[ntimes_passed * 2 - 1];
+                avar->last_bound = tmp_bnds[ntimes_passed * 2 - 1];
 
 /* -------------------------------------------------------------------- */
 /*      ok since we have bounds we need to set time in the middle       */
 /*      but only do this in case of none climato                        */
 /* -------------------------------------------------------------------- */
                 if (cmor_tables[cmor_axes[avar->axes_ids[0]].ref_table_id].axes
-                    [cmor_axes[avar->axes_ids[0]].ref_axis_id].climatology ==
-                    0) {
-                    for (i = 0; i < ntimes_passed; i++) {
-                        tmp_vals[i] =
-                          (tmp_vals[2 * i] + tmp_vals[2 * i + 1]) / 2.;
-                    }
+                    [cmor_axes[avar->axes_ids[0]].ref_axis_id].climatology == 0) 
+                {
+                    cmor_values_from_bounds(tmp_bnds,
+                                            time_vals,
+                                            tmp_time,
+                                            ntimes_passed,
+                                            cmor_axes[avar->axes_ids[0]].id
+                                            );
 /* -------------------------------------------------------------------- */
 /*      store for later                                                 */
 /* -------------------------------------------------------------------- */
 
-                    first_time = tmp_vals[0];
+                    first_time = tmp_time[0];
                 } else {
 /* -------------------------------------------------------------------- */
-/*      we need to put into tmp_vals the right things                   */
+/*      we need to put into tmp_time the right things                   */
 /* -------------------------------------------------------------------- */
                     ierr = cmor_convert_time_values(time_vals, 'd',
-                                                    ntimes_passed, &tmp_vals[0],
+                                                    ntimes_passed, &tmp_time[0],
                                                     cmor_axes[avar->axes_ids
                                                               [0]].iunits, msg,
                                                     msg2, msg2);
 
-                    first_time = tmp_vals[0];   /*store for later */
+                    first_time = tmp_time[0];   /*store for later */
                 }
 
                 ierr = nc_put_vara_double(ncid, avar->time_nc_id, starts,
-                                          counts, &tmp_vals[0]);
+                                          counts, &tmp_time[0]);
                 if (ierr != NC_NOERR) {
                     cmor_handle_error_variadic(
                         "NetCDF error (%i: %s) writing time values for variable '%s' (%s)",
@@ -3272,21 +3316,22 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
 
                 } else {
 
-                    if (tmp_vals[0] < avar->last_time) {
+                    if (tmp_time[0] < avar->last_time) {
                         cmor_handle_error_variadic(
                             "Time point: %lf ( %lf in output units) "
                             "is not monotonic last time was: %lf "
                             "(in output units), variable %s (table: %s)",
                             CMOR_CRITICAL,
-                            time_vals[0], tmp_vals[0], avar->last_time,
+                            time_vals[0], tmp_time[0], avar->last_time,
                             avar->id,
                             cmor_tables[avar->ref_table_id].szTable_id);
                     }
                 }
 
-                avar->last_time = tmp_vals[ntimes_passed - 1];
+                avar->last_time = tmp_time[ntimes_passed - 1];
 
-                free(tmp_vals);
+                free(tmp_bnds);
+                free(tmp_time);
             } else {
 /* -------------------------------------------------------------------- */
 /*      checks if you need bounds or not                                */
@@ -3310,9 +3355,9 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                 cmor_get_axis_attribute(avar->axes_ids[0], "units", 'c', &msg);
                 cmor_get_cur_dataset_attribute("calendar", msg2);
 
-                tmp_vals = malloc(ntimes_passed * sizeof(double));
+                tmp_time = malloc(ntimes_passed * sizeof(double));
 
-                if (tmp_vals == NULL) {
+                if (tmp_time == NULL) {
                     cmor_handle_error_variadic(
                         "cannot malloc %i time vals for variable "
                         "'%s' (table: %s)",
@@ -3321,24 +3366,24 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                         cmor_tables[avar->ref_table_id].szTable_id);
                 }
                 ierr = cmor_convert_time_values(time_vals, 'd', ntimes_passed,
-                                                &tmp_vals[0],
+                                                &tmp_time[0],
                                                 cmor_axes[avar->
                                                           axes_ids[0]].iunits,
                                                 msg, msg2, msg2);
 
                 ierr = nc_put_vara_double(ncid, avar->time_nc_id, starts,
-                                          counts, tmp_vals);
+                                          counts, tmp_time);
 
                 if (avar->ntimes_written == 0) {
 /* -------------------------------------------------------------------- */
 /*       ok first time we're putting data  in                           */
 /* -------------------------------------------------------------------- */
 
-                    avar->first_time = tmp_vals[0];
+                    avar->first_time = tmp_time[0];
                 }
-                avar->last_time = tmp_vals[ntimes_passed - 1];
+                avar->last_time = tmp_time[ntimes_passed - 1];
 
-                free(tmp_vals);
+                free(tmp_time);
                 if (ierr != NC_NOERR) {
                     cmor_handle_error_variadic(
                         "NetCDF error (%i: %s) writing times for variable '%s' "
