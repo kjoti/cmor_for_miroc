@@ -2,7 +2,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 
 dnl AC_PREREQ(2.59)
-AC_INIT(cmor, 3.5.0, doutriaux1@llnl.gov)
+AC_INIT(cmor, 3.6.1, mauzey1@llnl.gov)
 
 GIT_TAG=`cd $srcdir ; ./get_git_version.sh`
 
@@ -187,7 +187,7 @@ else
   JSONCLDFLAGS="-ljson-c"
   JSONCFLAGS=""
 fi
-AC_CHECK_LIB([json-c],[json_object_get_userdata],[],[AC_ERROR([Could not get a working json-c])],[ ${JSONCFLAGS} ${JSONCLDFLAGS}  ])
+AC_CHECK_LIB([json-c],[json_object_new_object],[],[AC_ERROR([Could not get a working json-c])],[ ${JSONCFLAGS} ${JSONCLDFLAGS}  ])
 
 AC_ARG_WITH([uuid],[AS_HELP_STRING([--with-uuid],[enable support for uuid in none standard location])],[],[with_uuid="no"])
 if [ test x${with_uuid} != xyes ] ; then

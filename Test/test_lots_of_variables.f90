@@ -177,7 +177,7 @@ PROGRAM mip_contribution
   !    files should not be overwritten, and instruct CMOR to error exit on 
   !    encountering errors of any severity.
   
-  error_flag = cmor_setup(inpath='Tables',   &
+  error_flag = cmor_setup(inpath='TestTables',   &
        netcdf_file_action='replace',                                       &
        set_verbosity=1,                                                    &
        exit_control=1)
@@ -187,13 +187,13 @@ PROGRAM mip_contribution
   !   conditions, and provide information to be included as attributes in 
   !   all CF-netCDF files written as part of this dataset.
 
-  print*, 'calling cmor_dataset'
-  error_flag = cmor_dataset_json("Test/CMOR_input_example.json")
+  print*, 'calling cmor_dataset_json'
+  error_flag = cmor_dataset_json("Test/CMOR_input_TestTables.json")
 
   !error_flag  = cmor_set_cur_dataset_attribute("initialization_method","4")
   !error_flag  = cmor_set_cur_dataset_attribute("physics_version","6")
 
-  print*, 'returned from cmor_dataset'
+  print*, 'returned from cmor_dataset_json'
 
   !  Define axes for 3-d fields
 

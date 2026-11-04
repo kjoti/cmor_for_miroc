@@ -653,14 +653,13 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
             }
             // Check source with experiment_id label.
             rc = cmor_get_cur_dataset_attribute(GLOBAL_ATT_SOURCE, szSource);
-            if(CV_source_id->nbObjects == -1) {
+            if(CV_source_id->nbObjects < 1) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "You did not define a %s section in your source_id %s.\n! \n! \n! "
                          "See Control Vocabulary JSON file. (%s)\n! ",
                          CV_KEY_SOURCE_LABEL, szSource_ID, CV_Filename);
-                cmor_handle_error(msg, CMOR_WARNING);
-                return(1);
-                break;
+                cmor_handle_error(msg, CMOR_CRITICAL);
+                return(-1);
             }
             for (j = 0; j < CV_source_id->nbObjects; j++) {
                 if (strcmp(CV_source_id->oValue[j].key, CV_KEY_SOURCE_LABEL) ==
@@ -673,8 +672,8 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
                          "Could not find %s string in source_id section.\n! \n! \n! "
                          "See Control Vocabulary JSON file. (%s)\n! ",
                          CV_KEY_SOURCE_LABEL, CV_Filename);
-                cmor_handle_error(msg, CMOR_WARNING);
-                break;
+                cmor_handle_error(msg, CMOR_CRITICAL);
+                return(-1);
             }
             pos = strchr(CV_source_id->oValue[j].szValue, ')');
             strncpy(szSubstring, CV_source_id->oValue[j].szValue,
@@ -709,6 +708,7 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
                  "a new source.   ", szSource_ID, CV_Filename);
 
         cmor_handle_error(msg, CMOR_NORMAL);
+        cmor_pop_traceback();
         return (-1);
     }
     // Set/replace attribute.
@@ -743,7 +743,7 @@ int CV_VerifyNBElement(cmor_CV_def_t * CV)
                  CV->key, CV_Filename);
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
-        return (0);
+        return (-1);
     } else if (CV->anElements == -1) {
         snprintf(msg, CMOR_MAX_STRING,
                  "Your %s has more than 0 element\n! "
@@ -752,7 +752,7 @@ int CV_VerifyNBElement(cmor_CV_def_t * CV)
 
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
-        return (0);
+        return (-1);
     }
     cmor_pop_traceback();
     return (0);
@@ -776,8 +776,6 @@ int CV_CompareNoParent(char *szKey)
                      szValue, NO_PARENT);
             cmor_set_cur_dataset_attribute_internal(szKey, NO_PARENT, 1);
             cmor_handle_error(msg, CMOR_WARNING);
-            cmor_pop_traceback();
-            return (-1);
         }
     }
     cmor_pop_traceback();
@@ -1012,6 +1010,7 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
     char CV_Filename[CMOR_MAX_STRING];
     char msg[CMOR_MAX_STRING];
     int rc;
+    int ierr = 0;
 
     szParentExpValue[0] = '\0';
     cmor_add_traceback("_CV_checkParentExpID");
@@ -1044,10 +1043,16 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
     // Do we have a parent_experiment_id?
     if (cmor_has_cur_dataset_attribute(GLOBAL_ATT_PARENT_EXPT_ID) != 0) {
         CV_parent_exp_id = cmor_CV_search_child_key(CV_experiment,
-                                                    PARENT_ACTIVITY_ID);
+                                                    PARENT_EXPERIMENT_ID);
         if (CV_IsStringInArray(CV_parent_exp_id, NO_PARENT)) {
-            cmor_pop_traceback();
-            return (0);
+            snprintf(msg, CMOR_MAX_STRING,
+                    "Your input attribute \"%s\" defined as \"\" "
+                    "will be replaced with \n! "
+                    "\"%s\" as defined in your Control Vocabulary file.\n! ",
+                    PARENT_EXPERIMENT_ID, NO_PARENT);
+            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_set_cur_dataset_attribute_internal(PARENT_EXPERIMENT_ID,
+                                                    NO_PARENT, 1);
         } else {
             snprintf(msg, CMOR_MAX_STRING,
                      "Your input attribute \"%s\" is not defined properly \n! "
@@ -1055,7 +1060,9 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                      "See Control Vocabulary JSON file.(%s)\n! ",
                      GLOBAL_ATT_PARENT_EXPT_ID, CV_experiment->key,
                      CV_Filename);
-            cmor_handle_error(msg, CMOR_CRITICAL);
+            cmor_handle_error(msg, CMOR_NORMAL);
+            cmor_pop_traceback();
+            return (-1);
         }
     }
     // The provider defined a parent experiment.
@@ -1098,9 +1105,6 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                     cmor_handle_error(msg, CMOR_WARNING);
                 }
             }
-
-            cmor_pop_traceback();
-            return (0);
         } else {
             // real parent case
             // Parent Activity ID
@@ -1110,8 +1114,8 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                          "for your experiment \"%s\"\n!\n! "
                          "See Control Vocabulary JSON file.(%s)\n! ",
                          PARENT_ACTIVITY_ID, CV_experiment->key, CV_Filename);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 cmor_get_cur_dataset_attribute(PARENT_ACTIVITY_ID, szValue);
                 CV_parent_activity_id = cmor_CV_search_child_key(CV_experiment,
@@ -1119,7 +1123,7 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                 if (CV_IsStringInArray(CV_parent_activity_id, szValue) == 0) {
                     if (CV_parent_activity_id->anElements == 1) {
                         snprintf(msg, CMOR_MAX_STRING,
-                                 "Your input attribute parent_activity_id \"%s\" defined as \"%s\" "
+                                 "Your input attribute \"%s\" defined as \"%s\" "
                                  "will be replaced with \n! "
                                  "\"%s\" as defined in your Control Vocabulary file.\n! ",
                                  PARENT_ACTIVITY_ID, szValue,
@@ -1142,14 +1146,15 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                 }
             }
             // branch method
-            if (cmor_has_cur_dataset_attribute(BRANCH_METHOD)) {
+            if (cmor_has_cur_dataset_attribute(BRANCH_METHOD) != 0) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "Your input attribute \"%s\" is not defined \n! "
                          "properly for %s \n! "
                          "Please describe the spin-up procedure as defined \n! "
                          "in CMIP6 documentations.\n! ",
                          BRANCH_METHOD, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
 
             } else {
                 cmor_get_cur_dataset_attribute(BRANCH_METHOD, szBranchMethod);
@@ -1158,17 +1163,19 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              "Your input attribute %s is an empty string\n! "
                              "Please describe the spin-up procedure as defined \n! "
                              "in CMIP6 documentations.\n! ", BRANCH_METHOD);
+                    cmor_handle_error(msg, CMOR_NORMAL);
+                    ierr = -1;
                 }
             }
             // branch_time_in_child
-            if (cmor_has_cur_dataset_attribute(BRANCH_TIME_IN_CHILD)) {
+            if (cmor_has_cur_dataset_attribute(BRANCH_TIME_IN_CHILD) != 0) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "Your input attribute \"%s\" is not defined \n! "
                          "properly for %s \n! "
                          "Please refer to the CMIP6 documentations.\n! ",
                          BRANCH_TIME_IN_CHILD, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 cmor_get_cur_dataset_attribute(BRANCH_TIME_IN_CHILD,
                                                szBranchTimeInChild);
@@ -1178,19 +1185,19 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              "Your input attribute branch_time_in_child \"%s\" "
                              "is not a double floating point \n! ",
                              szBranchTimeInChild);
-                    cmor_handle_error(msg, CMOR_CRITICAL);
+                    cmor_handle_error(msg, CMOR_NORMAL);
+                    ierr = -1;
                 }
             }
-
             // branch_time_in_parent
-            if (cmor_has_cur_dataset_attribute(BRANCH_TIME_IN_PARENT)) {
+            if (cmor_has_cur_dataset_attribute(BRANCH_TIME_IN_PARENT) != 0) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "Your input attribute \"%s\" is not defined \n! "
                          "properly for %s \n! "
                          "Please refer to the CMIP6 documentations.\n! ",
                          BRANCH_TIME_IN_PARENT, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 cmor_get_cur_dataset_attribute(BRANCH_TIME_IN_PARENT,
                                                szBranchTimeInParent);
@@ -1200,18 +1207,19 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              "Your input attribute branch_time_in_parent \"%s\" "
                              "is not a double floating point \n! ",
                              szBranchTimeInParent);
-                    cmor_handle_error(msg, CMOR_CRITICAL);
+                    cmor_handle_error(msg, CMOR_NORMAL);
+                    ierr = -1;
                 }
             }
             // parent_time_units
-            if (cmor_has_cur_dataset_attribute(PARENT_TIME_UNITS)) {
+            if (cmor_has_cur_dataset_attribute(PARENT_TIME_UNITS) != 0) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "Your input attribute \"%s\" is not defined \n! "
                          "properly for %s \n! "
                          "Please refer to the CMIP6 documentations.\n! ",
                          PARENT_TIME_UNITS, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 char template[CMOR_MAX_STRING];
                 int reti;
@@ -1228,32 +1236,30 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              template);
                     regfree(&regex);
                     cmor_handle_error(msg, CMOR_NORMAL);
-                    cmor_pop_traceback();
-                    return (-1);
-                }
-/* -------------------------------------------------------------------- */
-/*        Execute regular expression                                    */
-/* -------------------------------------------------------------------- */
-                reti = regexec(&regex, szParentTimeUnits, 0, NULL, 0);
-                if (reti == REG_NOMATCH) {
-                    snprintf(msg, CMOR_MAX_STRING,
-                             "Your  \"%s\" set to \"%s\" is invalid. \n! "
-                             "Please refer to the CMIP6 documentations.\n! ",
-                             PARENT_TIME_UNITS, szParentTimeUnits);
-                    regfree(&regex);
-                    cmor_handle_error(msg, CMOR_NORMAL);
+                    ierr = -1;
+                } else {
+                    // Execute regular expression
+                    reti = regexec(&regex, szParentTimeUnits, 0, NULL, 0);
+                    if (reti == REG_NOMATCH) {
+                        snprintf(msg, CMOR_MAX_STRING,
+                                "Your  \"%s\" set to \"%s\" is invalid. \n! "
+                                "Please refer to the CMIP6 documentations.\n! ",
+                                PARENT_TIME_UNITS, szParentTimeUnits);
+                        cmor_handle_error(msg, CMOR_NORMAL);
+                        ierr = -1;
+                    }
                 }
                 regfree(&regex);
             }
             // parent_variant_label
-            if (cmor_has_cur_dataset_attribute(PARENT_VARIANT_LABEL)) {
+            if (cmor_has_cur_dataset_attribute(PARENT_VARIANT_LABEL) != 0) {
                 snprintf(msg, CMOR_MAX_STRING,
                          "Your input attribute \"%s\" is not defined \n! "
                          "properly for %s \n! "
                          "Please refer to the CMIP6 documentations.\n! ",
                          PARENT_VARIANT_LABEL, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 char template[CMOR_MAX_STRING];
                 int reti;
@@ -1268,20 +1274,19 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              "You regular expression \"%s\" is invalid. \n! "
                              "Please refer to the CMIP6 documentations.\n! ",
                              template);
-                    regfree(&regex);
                     cmor_handle_error(msg, CMOR_NORMAL);
-                }
-/* -------------------------------------------------------------------- */
-/*        Execute regular expression                                    */
-/* -------------------------------------------------------------------- */
-                reti = regexec(&regex, szParentVariantLabel, 0, NULL, 0);
-                if (reti == REG_NOMATCH) {
-                    snprintf(msg, CMOR_MAX_STRING,
-                             "You  \"%s\" set to \"%s\" is invalid. \n! "
-                             "Please refer to the CMIP6 documentations.\n! ",
-                             PARENT_VARIANT_LABEL, szParentVariantLabel);
-                    regfree(&regex);
-                    cmor_handle_error(msg, CMOR_NORMAL);
+                    ierr = -1;
+                } else {
+                    // Execute regular expression
+                    reti = regexec(&regex, szParentVariantLabel, 0, NULL, 0);
+                    if (reti == REG_NOMATCH) {
+                        snprintf(msg, CMOR_MAX_STRING,
+                                "You  \"%s\" set to \"%s\" is invalid. \n! "
+                                "Please refer to the CMIP6 documentations.\n! ",
+                                PARENT_VARIANT_LABEL, szParentVariantLabel);
+                        cmor_handle_error(msg, CMOR_NORMAL);
+                        ierr = -1;
+                    }
                 }
                 regfree(&regex);
             }
@@ -1293,7 +1298,7 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                          "Please refer to the CMIP6 documentations.\n! ",
                          PARENT_SOURCE_ID, szExperiment_ID);
                 cmor_handle_error(msg, CMOR_NORMAL);
-
+                ierr = -1;
             } else {
                 cmor_get_cur_dataset_attribute(PARENT_SOURCE_ID,
                                                szParentSourceId);
@@ -1303,24 +1308,22 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                              "Your \"source_id\" key could not be found in\n! "
                              "your Control Vocabulary file.(%s)\n! ",
                              CV_Filename);
-
                     cmor_handle_error(msg, CMOR_NORMAL);
-                    cmor_pop_traceback();
-                    return (-1);
-                }
-                // Get specified experiment
-                cmor_get_cur_dataset_attribute(PARENT_SOURCE_ID,
-                                               szParentSourceId);
-                CV_source = cmor_CV_search_child_key(CV_source_id,
-                                                     szParentSourceId);
-                if (CV_source == NULL) {
-                    snprintf(msg, CMOR_MAX_STRING,
-                             "Your parent_source_id \"%s\" defined in your input file\n! "
-                             "could not be found in your Control Vocabulary file.(%s)\n! ",
-                             szParentSourceId, CV_Filename);
-                    cmor_handle_error(msg, CMOR_NORMAL);
-                    cmor_pop_traceback();
-                    return (-1);
+                    ierr = -1;
+                } else {
+                    // Get specified experiment
+                    cmor_get_cur_dataset_attribute(PARENT_SOURCE_ID,
+                                                szParentSourceId);
+                    CV_source = cmor_CV_search_child_key(CV_source_id,
+                                                        szParentSourceId);
+                    if (CV_source == NULL) {
+                        snprintf(msg, CMOR_MAX_STRING,
+                                "Your parent_source_id \"%s\" defined in your input file\n! "
+                                "could not be found in your Control Vocabulary file.(%s)\n! ",
+                                szParentSourceId, CV_Filename);
+                        cmor_handle_error(msg, CMOR_NORMAL);
+                        ierr = -1;
+                    }
                 }
             }
             // parent_mip_era
@@ -1330,8 +1333,8 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
                          "properly for %s \n! "
                          "Please refer to the CMIP6 documentations.\n! ",
                          PARENT_MIP_ERA, szExperiment_ID);
-                cmor_handle_error(msg, CMOR_CRITICAL);
-
+                cmor_handle_error(msg, CMOR_NORMAL);
+                ierr = -1;
             } else {
                 cmor_get_cur_dataset_attribute(PARENT_MIP_ERA, szValue);
                 if (strcmp(CMIP6, szValue) != 0) {
@@ -1348,7 +1351,7 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
         }
     }
     cmor_pop_traceback();
-    return (0);
+    return (ierr);
 }
 
 /************************************************************************/
@@ -1369,7 +1372,8 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
     int nObjects;
     int i;
     int j;
-    int bWarning;
+    int bError;
+    int ierr;
 
     szExpValue[0] = '\0';
     cmor_add_traceback("_CV_checkExperiment");
@@ -1402,10 +1406,11 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
         return (-1);
     }
 
+    ierr = 0;
     nObjects = CV_experiment->nbObjects;
     // Parse all experiment attributes
     for (i = 0; i < nObjects; i++) {
-        bWarning = 0;
+        bError = 0;
         CV_experiment_attr = &CV_experiment->oValue[i];
         rc = cmor_has_cur_dataset_attribute(CV_experiment_attr->key);
         strcpy(szExpValue, CV_experiment_attr->szValue);
@@ -1414,7 +1419,8 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
             continue;
         }
         if (strcmp(CV_experiment_attr->key, CV_EXP_ATTR_REQSOURCETYPE) == 0) {
-            cmor_CV_checkSourceType(CV_experiment, szExperiment_ID);
+            if(cmor_CV_checkSourceType(CV_experiment, szExperiment_ID) != 0)
+                ierr = -1;
             continue;
         }
         // Warn user if experiment value from input file is different than
@@ -1435,7 +1441,7 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
                 if (j == CV_experiment_attr->anElements) {
                     if (CV_experiment_attr->anElements == 1) {
                         strcpy(szExpValue, CV_experiment_attr->aszValue[0]);
-                        bWarning = 1;
+                        bError = 1;
                     } else {
                         snprintf(msg, CMOR_MAX_STRING,
                                  "Your input attribute \"%s\" with value \n! \"%s\" "
@@ -1446,6 +1452,8 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
                                  CV_experiment_attr->key, szValue,
                                  CV_experiment->key, CV_Filename);
                         cmor_handle_error(msg, CMOR_CRITICAL);
+                        cmor_pop_traceback();
+                        return (-1);
 
                     }
                 }
@@ -1457,21 +1465,22 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
                     if (strncmp(CV_experiment_attr->szValue, szValue,
                     CMOR_MAX_STRING) != 0) {
                         strcpy(szExpValue, CV_experiment_attr->szValue);
-                        bWarning = 1;
+                        bError = 1;
                     }
                 }
             }
         }
-        if (bWarning == 1) {
+        if (bError == 1) {
             snprintf(msg, CMOR_MAX_STRING,
                      "Your input attribute \"%s\" with value \n! \"%s\" "
-                     "will be replaced with "
+                     "needs to be replaced with "
                      "value \"%s\"\n! "
                      "as defined for experiment_id \"%s\".\n! \n!  "
                      "See Control Vocabulary JSON file.(%s)\n! ",
                      CV_experiment_attr->key, szValue, szExpValue,
                      CV_experiment->key, CV_Filename);
-            cmor_handle_error(msg, CMOR_WARNING);
+            cmor_handle_error(msg, CMOR_NORMAL);
+            ierr = -1;
         }
         // Set/replace attribute.
         cmor_set_cur_dataset_attribute_internal(CV_experiment_attr->key,
@@ -1482,7 +1491,7 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
     }
     cmor_pop_traceback();
 
-    return (0);
+    return (ierr);
 }
 
 /************************************************************************/
@@ -2308,6 +2317,8 @@ int cmor_CV_variable(int *var_id, char *name, char *units,
 
     if (CMOR_TABLE == -1) {
         cmor_handle_error("You did not define a table yet!", CMOR_CRITICAL);
+        cmor_pop_traceback();
+        return (-1);
     }
 
 /* -------------------------------------------------------------------- */
@@ -2339,6 +2350,8 @@ int cmor_CV_variable(int *var_id, char *name, char *units,
         snprintf(msg, CMOR_MAX_STRING,
                  "Could not find a matching variable for name: '%s'", ctmp);
         cmor_handle_error(msg, CMOR_CRITICAL);
+        cmor_pop_traceback();
+        return (-1);
     }
 
     refvar = cmor_tables[CMOR_TABLE].vars[iref];

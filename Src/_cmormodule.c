@@ -458,7 +458,8 @@ static PyObject *PyCMOR_load_table(PyObject * self, PyObject * args)
 static PyObject *PyCMOR_axis(PyObject * self, PyObject * args)
 {
     signal(signal_to_catch, signal_handler);
-    int ierr, axis_id, n = 0;
+    int ierr, axis_id, i, n = 0;
+    int string_length, max_string_length;
     char *name;
     char *units;
     char *interval;
@@ -468,7 +469,9 @@ static PyObject *PyCMOR_axis(PyObject * self, PyObject * args)
     void *cell_bounds;
     int cell_bounds_ndim;
     char *tmpstr = NULL;
-    PyObject *coords_obj, *bounds_obj;
+    char *dataptr;
+    npy_intp stride;
+    PyObject *coords_obj, *bounds_obj, *tmp;
     PyArrayObject *coords = NULL, *bounds = NULL;
 
 /************************************************************************/
@@ -496,18 +499,43 @@ static PyObject *PyCMOR_axis(PyObject * self, PyObject * args)
             coord_vals = (void *)PyArray_DATA(coords);
             n = cell_bounds_ndim;
         } else {
+            stride = PyArray_STRIDE(coords, 0);
+            dataptr = PyArray_DATA(coords);
+            
+            // Find maximum size of string
+            max_string_length = 0;
+            for (i = 0; i < length; i++) {
+                tmp = PyArray_GETITEM(coords, dataptr);
+#if PY_MAJOR_VERSION >= 3
+                string_length = PyUnicode_GET_LENGTH(tmp);
+#else
+                string_length = PyString_Size(tmp);
+#endif
+                if(string_length > max_string_length){
+                    max_string_length = string_length;
+                }
+                dataptr += stride;
+            }
+
+            // Copy strings from array
+            dataptr = PyArray_DATA(coords);
             tmpstr =
-              (char *)malloc(sizeof(char) * length * (cell_bounds_ndim + 1));
-            for (ierr = 0; ierr < length; ierr++) {
-                coord_vals = (void *)PyArray_GETPTR1(coords, ierr);
-                strncpy(&tmpstr[ierr * (cell_bounds_ndim + 1)],
-                        coord_vals, cell_bounds_ndim);
-                tmpstr[ierr * (cell_bounds_ndim + 1) + cell_bounds_ndim] = '\0';
+              (char *)malloc(sizeof(char) * length * (max_string_length + 1));
+            for (i = 0; i < length; i++) {
+                tmp = PyArray_GETITEM(coords, dataptr);
+#if PY_MAJOR_VERSION >= 3
+                strncpy(&tmpstr[i * (max_string_length + 1)],
+                        PyUnicode_AsUTF8(tmp), max_string_length);
+                tmpstr[i * (max_string_length + 1) + max_string_length] = '\0';
+#else
+                strncpy(&tmpstr[i * (max_string_length + 1)],
+                        PyString_AsString(tmp), max_string_length);
+                tmpstr[i * (max_string_length + 1) + max_string_length] = '\0';
+#endif
+                dataptr += stride;
             }
             coord_vals = &tmpstr[0];
-            n = cell_bounds_ndim + 1;
-            for (ierr = 0; ierr < length; ierr++) {
-            }
+            n = max_string_length + 1;
         }
     }
 
@@ -671,7 +699,7 @@ static PyObject *PyCMOR_zfactor(PyObject * self, PyObject * args)
     if (axes_obj == Py_None) {
         axes_ids = NULL;
     } else {
-        if (ndims > 1) {
+        if (!PyArray_CheckAnyScalar(axes_obj)) {
             axes =
               (PyArrayObject *) PyArray_ContiguousFromObject(axes_obj,
                                                              NPY_NOTYPE, 1, 0);
@@ -824,7 +852,7 @@ static PyObject *PyCMOR_write(PyObject * self, PyObject * args)
     if (times_obj == Py_None) {
         times = NULL;
     } else {
-        if (ntimes > 1) {
+        if (!PyArray_CheckAnyScalar(times_obj)) {
             times_array = (PyArrayObject *)
               PyArray_ContiguousFromObject(times_obj, NPY_NOTYPE, 1, 0);
             times = (void *)PyArray_DATA(times_array);
