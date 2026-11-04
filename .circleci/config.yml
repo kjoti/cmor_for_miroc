@@ -116,7 +116,7 @@ aliases:
 executors:
    linux:
       machine:
-         image: ubuntu-2004:202201-02
+         image: ubuntu-2204:2024.01.2
       environment:
         OS: "linux-64"
         PROJECT_DIR: "workdir/linux"
@@ -140,7 +140,7 @@ jobs:
       executor: << parameters.os >>
       environment:
          PKG_NAME: "cmor"
-         VERSION: "3.8.0"
+         VERSION: "3.9.0"
          PYTHON_VERSION: << parameters.python_version >>
          CHANNELS: "-c conda-forge"
       steps:
@@ -196,8 +196,8 @@ workflows:
          - build:
               matrix:
                  parameters:
-                    os: [ linux, macos ]
-                    python_version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
+                    os: [ linux ]
+                    python_version: [ "3.9", "3.10", "3.11", "3.12" ]
               name: build-<< matrix.os >>-<< matrix.python_version >>
 
          - upload:
