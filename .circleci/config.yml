@@ -22,8 +22,12 @@ aliases:
     name: setup_miniconda
     command: |
        source $BASH_ENV
-       git clone https://github.com/CDAT/cdat.git $WORKDIR/cdat
-       python $WORKDIR/cdat/scripts/install_miniconda.py -w $WORKDIR -p 'py3'
+       if [[ $OS == 'osx-64' ]]; then
+       curl -L https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -o miniconda.sh
+       else
+       curl -L https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+       fi
+       bash miniconda.sh -b -p $WORKDIR/miniconda
        
   - &conda_rerender
     name: conda_rerender
@@ -66,40 +70,12 @@ aliases:
        conda activate base
        export UVCDAT_ANONYMOUS_LOG=False
        set +e
-       conda create -y -n py$PYTHON_VERSION --use-local $CHANNELS python=$PYTHON_VERSION $PKG_NAME $PKGS $CONDA_COMPILERS
-       conda activate py$PYTHON_VERSION
+       conda create -y -n test_py$PYTHON_VERSION --use-local $CHANNELS python=$PYTHON_VERSION $PKG_NAME=$VERSION $CONDA_COMPILERS
+       conda activate test_py$PYTHON_VERSION
        set -e
        ./configure --prefix=$CONDA_PREFIX --with-python --with-uuid=$CONDA_PREFIX --with-json-c=$CONDA_PREFIX --with-udunits2=$CONDA_PREFIX --with-netcdf=$CONDA_PREFIX  --enable-verbose-test
        make test -o cmor -o python
 
-  - &run_cmor_tests_with_cdms2
-    name: run_cmor_tests_with_cdms2
-    command: |
-       source $BASH_ENV
-       source $WORKDIR/miniconda/etc/profile.d/conda.sh
-       conda activate base
-       export UVCDAT_ANONYMOUS_LOG=False
-       # run tests again but with cdms2 installed
-       set +e
-       conda create -y -n py$PYTHON_VERSION_cdms2 --use-local $CHANNELS python=$PYTHON_VERSION $PKG_NAME $PKGS $CONDA_COMPILERS cdms2
-       conda activate py$PYTHON_VERSION_cdms2
-       set -e
-       make test -o cmor -o python
-
-  - &run_prepare_tests
-    name: run_prepare_tests
-    command: |
-       source $BASH_ENV
-       source $WORKDIR/miniconda/etc/profile.d/conda.sh
-       conda activate base
-       export UVCDAT_ANONYMOUS_LOG=False
-       set +e
-       conda activate py$PYTHON_VERSION_cdms2
-       set -e
-       export PYTHONPATH=Test/:$PYTHONPATH
-       for file in `ls -1 Test/test_python_CMIP6_CV*.py`; do echo $file; python $file; mystatus=$?; if [[ "$mystatus" != "0" ]]; then return ${mystatus}; fi; done
-       python run_tests.py -v2 -H -n1 Test/test_python_CMIP6_CV*.py
-       
   - &conda_upload
     name: conda_upload
     command: |
@@ -115,36 +91,21 @@ aliases:
 executors:
    linux:
       machine:
-         image: circleci/classic:latest
+         image: ubuntu-2004:202201-02
       environment:
         OS: "linux-64"
         PROJECT_DIR: "workdir/linux"
         CONDA_COMPILERS: "gcc_linux-64 gfortran_linux-64"
    macos:
       macos:
-         xcode: "11.4.0"
+         xcode: "13.4.1"
+      resource_class: macos.x86.medium.gen2
       environment:
         OS: "osx-64"
         PROJECT_DIR: "workdir/macos"
         CONDA_COMPILERS: "clang_osx-64 gfortran_osx-64"
          
 jobs:
-   setup:
-      parameters:
-         os:
-            type: executor
-      executor: << parameters.os >>
-      steps:
-         - checkout
-         - attach_workspace:
-              at: .
-         - run: *setup_env
-         - run: *setup_miniconda
-         - persist_to_workspace:
-              root: .
-              paths:
-                 - workdir
-
    build:
       parameters:
          os:
@@ -154,25 +115,23 @@ jobs:
       executor: << parameters.os >>
       environment:
          PKG_NAME: "cmor"
-         VERSION: "3.6.1"
+         VERSION: "3.7.3"
          PYTHON_VERSION: << parameters.python_version >>
-         CHANNELS: "-c cdat/label/nightly -c conda-forge -c cdat"
-         PKGS: " lazy-object-proxy testsrunner"
+         CHANNELS: "-c conda-forge"
       steps:
          - checkout
          - attach_workspace:
-              at: .
+            at: .
          - run: *setup_env
+         - run: *setup_miniconda
          - run: *conda_rerender
          - run: *conda_build
          - run: *pull_submodules
          - run: *run_cmor_tests
-         - run: *run_cmor_tests_with_cdms2
-         - run: *run_prepare_tests
          - persist_to_workspace:
-              root: .
-              paths:
-                 - artifacts
+            root: .
+            paths:
+               - artifacts
 
    upload:
       parameters:
@@ -187,25 +146,34 @@ jobs:
          - attach_workspace:
               at: .
          - run: *setup_env
+         - run: *setup_miniconda
+         - run: *conda_upload
+
+   testing_upload:
+      parameters:
+         os:
+            type: executor
+      executor: << parameters.os >>
+      environment:
+         USER: "pcmdi"
+         LABEL: "testing"
+      steps:
+         - checkout
+         - attach_workspace:
+              at: .
+         - run: *setup_env
+         - run: *setup_miniconda
          - run: *conda_upload
 
 workflows:
    cmor:
       jobs:
-         - setup:
-              matrix:
-                 parameters:
-                    os: [ linux, macos ]
-              name: setup-<< matrix.os >>
-
          - build:
               matrix:
                  parameters:
                     os: [ linux, macos ]
-                    python_version: [ "3.6", "3.7", "3.8", "3.9" ]
+                    python_version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
               name: build-<< matrix.os >>-<< matrix.python_version >>
-              requires:
-                 - setup-<< matrix.os >>
 
          - upload:
               matrix:
@@ -216,4 +184,15 @@ workflows:
                  - build
               filters:
                  branches:
-                    only: master
+                    only: main
+
+         - testing_upload:
+              matrix:
+                 parameters:
+                    os: [ linux ]
+              name: testing_upload
+              requires:
+                 - build
+              filters:
+                 branches:
+                    only: testing

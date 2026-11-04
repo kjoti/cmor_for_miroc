@@ -493,13 +493,13 @@ class checkCMIP6(object):
         for attr in ['branch_time_in_child', 'branch_time_in_parent']:
             if attr in list(self.dictGbl.keys()):
                 self.set_double_value(attr)
-                if not numpy.issubdtype(self.dictGbl[attr], numpy.float64):
+                if not numpy.issubdtype(type(self.dictGbl[attr]), numpy.float64):
                     msg = "{} is not a double: {}".format(attr, type(self.dictGbl[attr]))
                     self.prepare_print(msg, 'FAIL', no_text_color, lines=True)
                     self.errors += 1
         for attr in ['realization_index', 'initialization_index', 'physics_index', 'forcing_index']:
             try:
-                if not numpy.issubdtype(self.dictGbl[attr], numpy.integer):
+                if not numpy.issubdtype(type(self.dictGbl[attr]), numpy.integer):
                     msg = "{} is not an integer: {}".format(attr, type(self.dictGbl[attr]))
                     self.prepare_print(msg, 'FAIL', no_text_color, lines=True)
                     self.errors += 1
@@ -617,8 +617,8 @@ class checkCMIP6(object):
                         table_value = file_value
                 if key == "cell_methods":
                     # Remove text that is inside parentheses i.e. comments
-                    file_value = re.sub(r"\(.*\)", "", file_value)
-                    table_value = re.sub(r"\(.*\)", "", table_value)
+                    file_value = re.sub(r"\(.*?\)", "", file_value)
+                    table_value = re.sub(r"\(.*?\)", "", table_value)
                     # Remove extra whitespace
                     file_value = " ".join(file_value.split())
                     table_value = " ".join(table_value.split())
@@ -931,7 +931,7 @@ def main():
         remove_ansi = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
         for logfile in set(logfiles):
             if not os.stat(logfile).st_size == 0:
-                with open(logfile, 'r') as f:
+                with open(logfile, 'r', encoding='utf8', errors='ignore') as f:
                     log_text = f.read()
                     if args.no_text_color:
                         log_text = remove_ansi.sub('', log_text)
@@ -955,7 +955,7 @@ def main():
             logfile, rc = process(source)
             errors += rc
             if not os.stat(logfile).st_size == 0:
-                with open(logfile, 'r') as f:
+                with open(logfile, 'r', encoding='utf8', errors='ignore') as f:
                     log_text = f.read()
                     if args.no_text_color:
                         log_text = remove_ansi.sub('', log_text)

@@ -20,9 +20,13 @@ import os
 import tempfile
 import base_CMIP6_CV
 
+# ==============================
+#  main thread
+# ==============================
+
+
 def run():
     unittest.main()
-
 
 class TestCase(base_CMIP6_CV.BaseCVsTest):
     def testCMIP6(self):
@@ -31,7 +35,7 @@ class TestCase(base_CMIP6_CV.BaseCVsTest):
             # Try to call cmor with a bad institution_ID
             # -------------------------------------------
             cmor.setup(inpath='Tables', netcdf_file_action=cmor.CMOR_REPLACE, logfile=self.tmpfile)
-            cmor.dataset_json("Test/common_user_input_NOID.json")
+            cmor.dataset_json("Test/CMOR_input_example_badfurtherinfourl.json")
 
             # ------------------------------------------
             # load Omon table and create masso variable
@@ -47,12 +51,15 @@ class TestCase(base_CMIP6_CV.BaseCVsTest):
 
             data = numpy.random.random(5)
             for i in range(0, 5):
-                cmor.write(ivar, data[i:i])
+                a = cmor.write(ivar, data[i:i])
             self.delete_files += [cmor.close(ivar, True)]
             cmor.close()
         except BaseException:
             pass
-        self.assertCV("Control Vocabulary file")
+        # ------------------------------------------
+        # Check error after signal handler is back
+        # ------------------------------------------
+        self.assertCV("The further info URL value of \"\" is invalid.")
 
 
 if __name__ == '__main__':

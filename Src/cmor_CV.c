@@ -380,6 +380,16 @@ int cmor_CV_checkFurtherInfoURL(int nVarRefTblID)
 /*    If this is a string with no token we have nothing to do.          */
 /* -------------------------------------------------------------------- */
     szToken = strtok(szFurtherInfoURLTemplate, "<>");
+    if (szToken == NULL) {
+        snprintf(msg, CMOR_MAX_STRING,
+                    "The further info URL value of \"%s\" is invalid. \n! ",
+                    szFurtherInfoURLTemplate);
+
+        cmor_handle_error(msg, CMOR_NORMAL);
+        cmor_pop_traceback();
+        return (-1);
+    }
+
     if (strcmp(szToken, cmor_current_dataset.furtherinfourl) == 0) {
         return (0);
     }
@@ -610,6 +620,7 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
     int nLen;
     char msg[CMOR_MAX_STRING];
     char CV_Filename[CMOR_MAX_STRING];
+    char CMOR_Filename[CMOR_MAX_STRING];
     int rc;
     int i;
     int j = 0;
@@ -617,6 +628,13 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
     cmor_is_setup();
     cmor_add_traceback("_CV_checkSourceID");
     cmor_get_cur_dataset_attribute(CV_INPUTFILENAME, CV_Filename);
+    rc = cmor_has_cur_dataset_attribute(CMOR_INPUTFILENAME);
+    if (rc == 0) {
+        cmor_get_cur_dataset_attribute(CMOR_INPUTFILENAME, CMOR_Filename);
+    } else {
+        CMOR_Filename[0] = '\0';
+    }
+    
 /* -------------------------------------------------------------------- */
 /*  Find experiment_ids dictionary in Control Vocabulary                */
 /* -------------------------------------------------------------------- */
@@ -700,12 +718,17 @@ int cmor_CV_checkSourceID(cmor_CV_def_t * CV)
     if (i == CV_source_ids->nbObjects) {
 
         snprintf(msg, CMOR_MAX_STRING,
-                 "The source_id, \"%s\",  which you specified in your \n! "
-                 "input file could not be found in \n! "
+                 "The source_id, \"%s\", found in your \n! "
+                 "input file (%s) could not be found in \n! "
                  "your Controlled Vocabulary file. (%s) \n! \n! "
-                 "Please correct your input file or contact "
-                 "cmor@listserv.llnl.gov to register\n! "
-                 "a new source.   ", szSource_ID, CV_Filename);
+                 "Please correct your input file by using a valid source_id listed in your MIP tables' CV file.\n! "
+                 "To add a new source_id to the %s file, open a new issue in the\n! "
+                 "table's Github repository. Managed project CMOR and MIP tables are listed at\n! "
+                 "https://wcrp-cmip.github.io/WGCM_Infrastructure_Panel/cmor_and_mip_tables.html. \n! "
+                 "Contact \"pcmdi-cmip@llnl.gov\" for additional guidance.  \n! \n! "
+                 "See \"http://cmor.llnl.gov/mydoc_cmor3_CV/\" for further information about\n! "
+                 "the \"source_id\" and \"source\" global attributes.  ", 
+                 szSource_ID, CMOR_Filename, CV_Filename, CV_Filename);
 
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
@@ -820,11 +843,21 @@ int cmor_CV_checkSubExpID(cmor_CV_def_t * CV)
     char szVariant[CMOR_MAX_STRING];
 
     char msg[CMOR_MAX_STRING];
+    int ierr = 0;
 
     cmor_add_traceback("_CV_checkSubExperiment");
     // Initialize variables
     cmor_get_cur_dataset_attribute(CV_INPUTFILENAME, CV_Filename);
-    cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    ierr = cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    if (ierr != 0) {
+        snprintf(msg, CMOR_MAX_STRING,
+                 "Your \"%s\" is not defined, check your required attributes\n! "
+                 "See Control Vocabulary JSON file.(%s)\n! ",
+                 GLOBAL_ATT_EXPERIMENTID, CV_Filename);
+        cmor_handle_error(msg, CMOR_NORMAL);
+        cmor_pop_traceback();
+        return (-1);
+    }
     // Look for sub_experiment_id section
     CV_sub_experiment_id = cmor_CV_rootsearch(CV, CV_KEY_SUB_EXPERIMENT_ID);
     if (CV_sub_experiment_id == NULL) {
@@ -1016,7 +1049,16 @@ int cmor_CV_checkParentExpID(cmor_CV_def_t * CV)
     cmor_add_traceback("_CV_checkParentExpID");
 
     cmor_get_cur_dataset_attribute(CV_INPUTFILENAME, CV_Filename);
-    cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    ierr = cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    if (ierr != 0) {
+        snprintf(msg, CMOR_MAX_STRING,
+                 "Your \"%s\" is not defined, check your required attributes\n! "
+                 "See Control Vocabulary JSON file.(%s)\n! ",
+                 GLOBAL_ATT_EXPERIMENTID, CV_Filename);
+        cmor_handle_error(msg, CMOR_NORMAL);
+        cmor_pop_traceback();
+        return (-1);
+    }
     // Look for experiment_id section
     CV_experiment_ids = cmor_CV_rootsearch(CV, CV_KEY_EXPERIMENT_ID);
     if (CV_experiment_ids == NULL) {
@@ -1378,7 +1420,16 @@ int cmor_CV_checkExperiment(cmor_CV_def_t * CV)
     szExpValue[0] = '\0';
     cmor_add_traceback("_CV_checkExperiment");
     cmor_get_cur_dataset_attribute(CV_INPUTFILENAME, CV_Filename);
-    cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    ierr = cmor_get_cur_dataset_attribute(GLOBAL_ATT_EXPERIMENTID, szExperiment_ID);
+    if (ierr != 0) {
+        snprintf(msg, CMOR_MAX_STRING,
+                 "Your \"%s\" is not defined, check your required attributes\n! "
+                 "See Control Vocabulary JSON file.(%s)\n! ",
+                 GLOBAL_ATT_EXPERIMENTID, CV_Filename);
+        cmor_handle_error(msg, CMOR_NORMAL);
+        cmor_pop_traceback();
+        return (-1);
+    }
 /* -------------------------------------------------------------------- */
 /*  Find experiment_ids dictionary in Control Vocabulary                */
 /* -------------------------------------------------------------------- */
@@ -1825,15 +1876,17 @@ int cmor_CV_setInstitution(cmor_CV_def_t * CV)
 
     if (CV_institution == NULL) {
         snprintf(msg, CMOR_MAX_STRING,
-                 "The institution_id, \"%s\",  found in your \n! "
+                 "The institution_id, \"%s\", found in your \n! "
                  "input file (%s) could not be found in \n! "
                  "your Controlled Vocabulary file. (%s) \n! \n! "
-                 "Please correct your input file or contact "
-                 "\"cmor@listserv.llnl.gov\" to register\n! "
-                 "a new institution_id.  \n! \n! "
+                 "Please correct your input file by using a valid institution_id listed in your MIP tables' CV file.\n! "
+                 "To add a new institution_id to the %s file, open a new issue in the\n! "
+                 "table's Github repository. Managed project CMOR and MIP tables are listed at\n! "
+                 "https://wcrp-cmip.github.io/WGCM_Infrastructure_Panel/cmor_and_mip_tables.html. \n! "
+                 "Contact \"pcmdi-cmip@llnl.gov\" for additional guidance.  \n! \n! "
                  "See \"http://cmor.llnl.gov/mydoc_cmor3_CV/\" for further information about\n! "
                  "the \"institution_id\" and \"institution\" global attributes.  ",
-                 szInstitution_ID, CMOR_Filename, CV_Filename);
+                 szInstitution_ID, CMOR_Filename, CV_Filename, CV_Filename);
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
         return (-1);
@@ -1909,18 +1962,21 @@ int cmor_CV_ValidateAttribute(cmor_CV_def_t * CV, char *szKey)
     cmor_CV_def_t *key_CV;
     cmor_CV_def_t *list_CV;
     cmor_CV_def_t *CV_key;
+    cmor_CV_def_t *required_attrs;
     char szValue[CMOR_MAX_STRING];
     char msg[CMOR_MAX_STRING];
     char CV_Filename[CMOR_MAX_STRING];
     char szValids[CMOR_MAX_STRING];
     char szOutput[CMOR_MAX_STRING];
     char szTmp[CMOR_MAX_STRING];
-    int i;
+    char tableValue[CMOR_MAX_STRING];
+    int i, j;
     int nObjects;
     regex_t regex;
     int reti;
     int ierr;
     int nValueLen;
+    int isRequired;
 
     cmor_add_traceback("_CV_ValidateAttribute");
 
@@ -1996,11 +2052,84 @@ int cmor_CV_ValidateAttribute(cmor_CV_def_t * CV, char *szKey)
             return (0);
         }
         nObjects = list_CV->nbObjects;
+        required_attrs = cmor_CV_rootsearch(CV, CV_KEY_REQUIRED_GBL_ATTRS);
         for (i = 0; i < nObjects; i++) {
             CV_key = &list_CV->oValue[i];
+
+            // Check if the attribute is required
+            isRequired = 0;
+            for (j = 0; j < required_attrs->anElements; j++) {
+                if(strcmp(CV_key->key, required_attrs->aszValue[j]) == 0)
+                    isRequired = 1;
+            }
+
             if (CV_key->szValue[0] != '\0') {
-                cmor_set_cur_dataset_attribute_internal(CV_key->key,
-                        CV_key->szValue, 1);
+                if(cmor_has_cur_dataset_attribute(CV_key->key) == 0){
+                    cmor_get_cur_dataset_attribute(CV_key->key, szTmp);
+                    if(szTmp[0] != '\0' && strcmp(CV_key->szValue, szTmp) != 0){
+                        reti = cmor_get_table_attr(CV_key->key, &cmor_tables[CMOR_TABLE], tableValue);
+                        if(reti == 0 && strcmp(tableValue, szTmp) == 0){
+                            snprintf(msg, CMOR_MAX_STRING,
+                                    "The registered CV attribute \"%s\" as defined as \"%s\" "
+                                    "will be replaced with \n! "
+                                    "\"%s\" as defined in the table %s\n! ",
+                                    CV_key->key, CV_key->szValue, szTmp, cmor_tables[CMOR_TABLE].szTable_id);
+                            cmor_handle_error(msg, CMOR_WARNING);
+                        } else {
+                            snprintf(msg, CMOR_MAX_STRING,
+                                    "The registered CV attribute \"%s\" as defined as \"%s\" "
+                                    "will be replaced with \n! "
+                                    "\"%s\" as defined in your user input file\n! ",
+                                    CV_key->key, CV_key->szValue, szTmp);
+                            cmor_handle_error(msg, CMOR_WARNING);
+                        }
+                    } else {
+                        cmor_set_cur_dataset_attribute_internal(CV_key->key,
+                                CV_key->szValue, 1);
+                    }
+                } else {
+                    cmor_set_cur_dataset_attribute_internal(CV_key->key,
+                            CV_key->szValue, 1);
+                }
+            } else if (CV_key->anElements == 1 && isRequired == 1) {
+                if(cmor_has_cur_dataset_attribute(CV_key->key) == 0){
+                    cmor_get_cur_dataset_attribute(CV_key->key, szTmp);
+                    if(szTmp[0] != '\0' && strcmp(CV_key->aszValue[0], szTmp) != 0){
+                        reti = cmor_get_table_attr(CV_key->key, &cmor_tables[CMOR_TABLE], tableValue);
+                        if(reti == 0 && strcmp(tableValue, szTmp) == 0){
+                            snprintf(msg, CMOR_MAX_STRING,
+                                    "The registered CV attribute \"%s\" as defined as \"%s\" "
+                                    "will be replaced with \n! "
+                                    "\"%s\" as defined in the table %s\n! ",
+                                    CV_key->key, CV_key->aszValue[0], szTmp, cmor_tables[CMOR_TABLE].szTable_id);
+                            cmor_handle_error(msg, CMOR_WARNING);
+                        } else {
+                            snprintf(msg, CMOR_MAX_STRING,
+                                    "The registered CV attribute \"%s\" as defined as \"%s\" "
+                                    "will be replaced with \n! "
+                                    "\"%s\" as defined in your user input file\n! ",
+                                    CV_key->key, CV_key->aszValue[0], szTmp);
+                            cmor_handle_error(msg, CMOR_WARNING);
+                        }
+                    } else {
+                        cmor_set_cur_dataset_attribute_internal(CV_key->key,
+                                CV_key->aszValue[0], 1);
+                    }
+                } else {
+                    cmor_set_cur_dataset_attribute_internal(CV_key->key,
+                            CV_key->aszValue[0], 1);
+                }
+            } else if (CV_key->anElements > 1 && isRequired == 1) {
+                if(cmor_has_cur_dataset_attribute(CV_key->key) != 0) {
+                    snprintf(msg, CMOR_MAX_STRING,
+                            "The registered CV attribute \"%s\" has multiple values \n! "
+                            "defined in \"%s\"\n! "
+                            "Please select one from the entry %s.%s.%s.",
+                            CV_key->key, CV_Filename, szKey, szValue, CV_key->key);
+                    cmor_handle_error(msg, CMOR_NORMAL);
+                    cmor_pop_traceback();
+                    return (-1);
+                }
             }
         }
     }
@@ -2009,21 +2138,13 @@ int cmor_CV_ValidateAttribute(cmor_CV_def_t * CV, char *szKey)
 /* We could not validate this attribute, exit.                          */
 /* -------------------------------------------------------------------- */
     if (i == (attr_CV->anElements)) {
-        for (i = 0; i < attr_CV->anElements; i++) {
-            strcat(szValids, "\"");
-            strncpy(szOutput, attr_CV->aszValue[i], CMOR_MAX_STRING);
-            strcat(szValids, szOutput);
-            strcat(szValids, "\" ");
-        }
-
         snprintf(msg, CMOR_MAX_STRING,
                  "The attribute \"%s\" could not be validated. \n! "
                  "The current input value is "
-                 "\"%s\" which is not valid \n! "
-                 "Valid values must match the regular expression:"
-                 "\n! \t[%s] \n! \n! "
-                 "Check your Control Vocabulary file \"%s\".\n! ",
-                 szKey, szValue, szValids, CV_Filename);
+                 "\"%s\", which is not valid. \n! \n! "
+                 "Valid values must match those found in the \"%s\" "
+                 "section\n! of your Controlled Vocabulary (CV) file \"%s\".\n! ",
+                 szKey, szValue, szKey, CV_Filename);
 
         cmor_handle_error(msg, CMOR_NORMAL);
         cmor_pop_traceback();
