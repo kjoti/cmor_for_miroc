@@ -17,6 +17,7 @@
 #include <math.h>
 #include <limits.h>
 #include <regex.h>
+#include <libgen.h>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -43,11 +44,8 @@ int nc_def_var_chunking(int i, int j, int k, size_t * l)
 };
 #endif
 
-#ifndef H5Z_FILTER_ZSTD
-int nc_def_var_zstandard(int i, int j, int k)
-{
-    return (0);
-};
+#ifndef NC_CHUNKED
+#define NC_CHUNKED 0
 #endif
 
 #ifndef NC_QUANTIZE_BITGROOM
@@ -67,7 +65,12 @@ static int cmor_nc_def_var_zstandard_checked(int ncid, int varid,
                                              const char *var_name,
                                              const char *table_id)
 {
-    char *missing_zstd_filter_msg =
+    const char *missing_compile_time_zstd_msg =
+        "This CMOR build was compiled against a netcdf-c installation "
+        "that does not expose zstandard filter support "
+        "(H5Z_FILTER_ZSTD / nc_def_var_zstandard).\n! "
+        "Rebuild CMOR against a zstd-enabled netcdf-c installation.";
+    const char *missing_runtime_zstd_filter_msg =
         "This usually means the HDF5 Zstandard filter plugin "
         "(H5Z_FILTER_ZSTD) was not found at runtime.\n! "
         "If you are using a conda/mamba environment, install the plugin package:\n! "
@@ -79,9 +82,28 @@ static int cmor_nc_def_var_zstandard_checked(int ncid, int varid,
         "print(hdf5plugin.PLUGINS_PATH)')\"\n! "
         "or point HDF5_PLUGIN_PATH to a directory like:\n! "
         "  $CONDA_PREFIX/lib/pythonX.Y/site-packages/hdf5plugin/plugins\n! ";
-
+    const char *zstd_detail_msg = "";
+#ifdef H5Z_FILTER_ZSTD
     int ierr = nc_def_var_zstandard(ncid, varid, zstandard_level);
+#else
+#if defined(NC_ENOTBUILT)
+    int ierr = NC_ENOTBUILT;
+#elif defined(NC_EFILTER)
+    int ierr = NC_EFILTER;
+#elif defined(NC_ENOFILTER)
+    int ierr = NC_ENOFILTER;
+#else
+    int ierr = NC_EINVAL;
+#endif
+    zstd_detail_msg = missing_compile_time_zstd_msg;
+#endif
+
     if (ierr != NC_NOERR) {
+#ifdef H5Z_FILTER_ZSTD
+        if (ierr == NC_ENOFILTER) {
+            zstd_detail_msg = missing_runtime_zstd_filter_msg;
+        }
+#endif
         cmor_handle_error_var_variadic(
             "NetCDF Error (%i: %s) enabling zstandard compression on "
             "variable '%s' (table: %s)\n! %s",
@@ -89,11 +111,67 @@ static int cmor_nc_def_var_zstandard_checked(int ncid, int varid,
             ierr, nc_strerror(ierr),
             (var_name != NULL) ? var_name : "(unknown)",
             (table_id != NULL) ? table_id : "(unknown)",
-            (ierr == NC_ENOFILTER) ? missing_zstd_filter_msg : ""
+            zstd_detail_msg
         );
     }
 
     return ierr;
+}
+
+/*
+ * Apply NetCDF chunking after clamping each requested chunk length to the
+ * variable's fixed dimension length. This keeps small coordinate and bounds
+ * variables from inheriting oversized chunk shapes that some NetCDF builds
+ * reject as "bad chunk sizes".
+ */
+static int cmor_nc_def_var_chunking_clamped(int ncid, int varid, int storage,
+                                            const size_t *requested_chunks)
+{
+    int ierr;
+    int ndims;
+    int dimids[CMOR_MAX_DIMENSIONS];
+    size_t chunk_sizes[CMOR_MAX_DIMENSIONS];
+    size_t dim_length;
+    int i;
+
+    if ((storage != NC_CHUNKED) || (requested_chunks == NULL)) {
+        return nc_def_var_chunking(ncid, varid, storage,
+                                   (size_t *)requested_chunks);
+    }
+
+    ierr = nc_inq_varndims(ncid, varid, &ndims);
+    if (ierr != NC_NOERR) {
+        return ierr;
+    }
+
+    if (ndims > CMOR_MAX_DIMENSIONS) {
+        return nc_def_var_chunking(ncid, varid, storage,
+                                   (size_t *)requested_chunks);
+    }
+
+    ierr = nc_inq_vardimid(ncid, varid, dimids);
+    if (ierr != NC_NOERR) {
+        return ierr;
+    }
+
+    for (i = 0; i < ndims; i++) {
+        chunk_sizes[i] = requested_chunks[i];
+        if (chunk_sizes[i] == 0) {
+            chunk_sizes[i] = 1;
+        }
+
+        ierr = nc_inq_dimlen(ncid, dimids[i], &dim_length);
+        if (ierr != NC_NOERR) {
+            return ierr;
+        }
+
+        /* Leave unlimited dimensions alone, but clamp fixed dimensions. */
+        if ((dim_length > 0) && (chunk_sizes[i] > dim_length)) {
+            chunk_sizes[i] = dim_length;
+        }
+    }
+
+    return nc_def_var_chunking(ncid, varid, storage, &chunk_sizes[0]);
 }
 
 /* -------------------------------------------------------------------- */
@@ -644,7 +722,7 @@ int cmor_have_NetCDF41min(void)
 }
 
 /************************************************************************/
-/*                         cmor_handle_error_internal()                          */
+/*                   cmor_handle_error_internal()                       */
 /************************************************************************/
 void cmor_handle_error_internal(char *error_msg, int level)
 {
@@ -654,83 +732,68 @@ void cmor_handle_error_internal(char *error_msg, int level)
     if (output_logfile == NULL)
         output_logfile = stderr;
 
+#ifdef COLOREDOUTPUT
+    int use_color = isatty(fileno(output_logfile));
+    #define ANSI_COLOR(f, ...) do { if (use_color) fprintf(f, __VA_ARGS__); } while(0)
+#else
+    #define ANSI_COLOR(f, ...) do {} while(0)
+#endif
+
     if (CMOR_VERBOSITY != CMOR_QUIET) {
         fprintf(output_logfile, "\n");
     }
+
     if (level == CMOR_WARNING) {
         cmor_nwarnings++;
         if (CMOR_VERBOSITY != CMOR_QUIET) {
-
-#ifdef COLOREDOUTPUT
-            fprintf(output_logfile, "%c[%d;%d;%dm", 0X1B, 2, 34, 47);
-#endif
-
+            ANSI_COLOR(output_logfile, "%c[%d;%d;%dm", 0x1B, 2, 34, 47);
             fprintf(output_logfile, "C Traceback:\nIn function: %s",
                     cmor_traceback_info);
-
-#ifdef COLOREDOUTPUT
-            fprintf(output_logfile, "%c[%dm", 0X1B, 0);
-#endif
-
+            ANSI_COLOR(output_logfile, "%c[%dm", 0x1B, 0);
             fprintf(output_logfile, "\n\n");
-
-#ifdef COLOREDOUTPUT
-            fprintf(output_logfile, "%c[%d;%d;%dm", 0X1B, 1, 34, 47);
-#endif
         }
     } else {
         cmor_nerrors++;
-
-#ifdef COLOREDOUTPUT
-        fprintf(output_logfile, "%c[%d;%d;%dm", 0X1B, 2, 31, 47);
-#endif
-
+        ANSI_COLOR(output_logfile, "%c[%d;%d;%dm", 0x1B, 2, 31, 47);
         fprintf(output_logfile, "C Traceback:\n! In function: %s",
                 cmor_traceback_info);
-
-#ifdef COLOREDOUTPUT
-        fprintf(output_logfile, "%c[%dm", 0X1B, 0);
-#endif
-
+        ANSI_COLOR(output_logfile, "%c[%dm", 0x1B, 0);
         fprintf(output_logfile, "\n\n");
-
-#ifdef COLOREDOUTPUT
-        fprintf(output_logfile, "%c[%d;%d;%dm", 0X1B, 1, 31, 47);
-#endif
     }
-    // fprintf(stderr, "%s ERROR LEVEL %d\n", error_msg, level);
+
     if (CMOR_VERBOSITY != CMOR_QUIET || level != CMOR_WARNING) {
-        for (i = 0; i < 25; i++) {
-            fprintf(output_logfile, "!");
+        /* Color the entire box: borders and message in one region */
+        if (level == CMOR_WARNING) {
+            ANSI_COLOR(output_logfile, "%c[%d;%d;%dm", 0x1B, 1, 34, 47);
+        } else {
+            ANSI_COLOR(output_logfile, "%c[%d;%d;%dm", 0x1B, 1, 31, 47);
         }
+
+        for (i = 0; i < 25; i++)
+            fprintf(output_logfile, "!");
         fprintf(output_logfile, "\n");
         fprintf(output_logfile, "!\n");
-        
+
         if (level == CMOR_WARNING)
             fprintf(output_logfile, "! Warning: %s\n", error_msg);
         else
             fprintf(output_logfile, "! Error: %s\n", error_msg);
 
         fprintf(output_logfile, "!\n");
-
         for (i = 0; i < 25; i++)
             fprintf(output_logfile, "!");
 
-#ifdef COLOREDOUTPUT
-        fprintf(output_logfile, "%c[%dm", 0X1B, 0);
-#endif
-
+        ANSI_COLOR(output_logfile, "%c[%dm", 0x1B, 0);
         fprintf(output_logfile, "\n\n");
     }
 
     CV_ERROR = 1;
     if (level == CMOR_NOT_SETUP) {
         exit(1);
-
     }
     if ((CMOR_MODE == CMOR_EXIT_ON_WARNING) || (level == CMOR_CRITICAL)) {
-        fflush(stdout); 
-        fflush(output_logfile); 
+        fflush(stdout);
+        fflush(output_logfile);
         kill(getpid(), SIGTERM);
     }
     fflush(output_logfile);
@@ -2647,7 +2710,10 @@ int cmor_set_refvar(int var_id, int *refvar, int ntimes_passed)
 /* -------------------------------------------------------------------- */
     int nRefVarID = var_id;
     int nVarRefTblID = cmor_vars[var_id].ref_table_id;
+    int nTimesToWrite = ntimes_passed;
+    int nAssociatedIndex = -1;
     int ierr;
+    int i;
 
     cmor_add_traceback("cmor_set_refvar");
     if (refvar != NULL) {
@@ -2681,8 +2747,43 @@ int cmor_set_refvar(int var_id, int *refvar, int ntimes_passed)
                 cmor_vars[*refvar].id);
         }
 #if 0 /* unnecessary and harmful */
-        cmor_vars[var_id].ntimes_written =
-          cmor_vars[nRefVarID].ntimes_written - ntimes_passed;
+
+        if ((nTimesToWrite == 0) && (cmor_vars[var_id].ndims > 0)
+            && (cmor_axes[cmor_vars[var_id].axes_ids[0]].axis == 'T')
+            && (cmor_axes[cmor_vars[var_id].axes_ids[0]].values != NULL)) {
+            nTimesToWrite = cmor_axes[cmor_vars[var_id].axes_ids[0]].length;
+        }
+
+        for (i = 0; i < 10; i++) {
+            if (cmor_vars[nRefVarID].associated_ids[i] == var_id) {
+                nAssociatedIndex = i;
+                break;
+            }
+        }
+
+        if (nAssociatedIndex != -1) {
+            cmor_vars[var_id].ntimes_written =
+              cmor_vars[nRefVarID].ntimes_written_associated[nAssociatedIndex];
+
+            if ((nTimesToWrite > 0) &&
+                (cmor_vars[var_id].ntimes_written + nTimesToWrite >
+                 cmor_vars[nRefVarID].ntimes_written)) {
+                cmor_handle_error_var_variadic(
+                    "You are trying to write %i time steps for associated "
+                    "variable '%s' (table: %s), starting at time step %i, "
+                    "but associated variable '%s' only has %i time steps "
+                    "available.",
+                    CMOR_CRITICAL, var_id,
+                    nTimesToWrite, cmor_vars[var_id].id,
+                    cmor_tables[nVarRefTblID].szTable_id,
+                    cmor_vars[var_id].ntimes_written,
+                    cmor_vars[nRefVarID].id,
+                    cmor_vars[nRefVarID].ntimes_written);
+            }
+        } else {
+            cmor_vars[var_id].ntimes_written =
+              cmor_vars[nRefVarID].ntimes_written - nTimesToWrite;
+        }
 #endif
     }
     cmor_pop_traceback();
@@ -3061,16 +3162,26 @@ int cmor_setDefaultGblAttr(int ref_table_id)
     }
 
 /* -------------------------------------------------------------------- */
-/*  Set data_specs_version and mip_era if they are in the CV.           */
+/*  Set root-level CV string attributes if they are present.            */
 /* -------------------------------------------------------------------- */
     CV_value = cmor_CV_rootsearch(cmor_tables[ref_table_id].CV, CV_KEY_DATASPECSVERSION);
     if (CV_value != NULL && CV_value->szValue[0] != '\0') {
         cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_DATASPECSVERSION,
             CV_value->szValue, 0);
     }
+    CV_value = cmor_CV_rootsearch(cmor_tables[ref_table_id].CV, CV_KEY_DRS_SPECS);
+    if (CV_value != NULL && CV_value->szValue[0] != '\0') {
+        cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_DRS_SPECS,
+            CV_value->szValue, 0);
+    }
     CV_value = cmor_CV_rootsearch(cmor_tables[ref_table_id].CV, CV_KEY_MIP_ERA);
     if (CV_value != NULL && CV_value->szValue[0] != '\0') {
         cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_MIP_ERA,
+            CV_value->szValue, 0);
+    }
+    CV_value = cmor_CV_rootsearch(cmor_tables[ref_table_id].CV, CV_KEY_TRACKING_PREFIX);
+    if (CV_value != NULL && CV_value->szValue[0] != '\0') {
+        cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_TRACKING_PREFIX,
             CV_value->szValue, 0);
     }
 
@@ -3163,9 +3274,11 @@ int cmor_setGblAttr(int var_id)
 /* -------------------------------------------------------------------- */
 /*    Set attribute Conventions for netCDF file metadata                */
 /* -------------------------------------------------------------------- */
-    snprintf(msg, CMOR_MAX_STRING, "%s", cmor_tables[nVarRefTblID].Conventions);
 
-    cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_CONVENTIONS, msg, 0);
+    if (cmor_has_cur_dataset_attribute(GLOBAL_ATT_CONVENTIONS) != 0) {
+        snprintf(msg, CMOR_MAX_STRING, "%s", cmor_tables[nVarRefTblID].Conventions);
+        cmor_set_cur_dataset_attribute_internal(GLOBAL_ATT_CONVENTIONS, msg, 0);
+    }
 
 /* -------------------------------------------------------------------- */
 /*    Set attribute data_specs_versions for netCDF file (CMIP6)         */
@@ -3198,7 +3311,8 @@ int cmor_setGblAttr(int var_id)
 /* -------------------------------------------------------------------- */
 /*    Set attribute Table_Info for netCDF file (CMIP6)                  */
 /* -------------------------------------------------------------------- */
-    snprintf(msg, CMOR_MAX_STRING, "Creation Date:(%s) MD5:",
+    snprintf(msg, CMOR_MAX_STRING, "Name: %s; Creation Date:(%s) MD5:",
+             basename(cmor_tables[nVarRefTblID].path),
              cmor_tables[nVarRefTblID].date);
 
     for (i = 0; i < 16; i++) {
@@ -5670,9 +5784,6 @@ void cmor_create_var_attributes(int var_id, int ncid, int ncafid,
 /* -------------------------------------------------------------------- */
 /*      Chunking stuff                                                  */
 /* -------------------------------------------------------------------- */
-#ifndef NC_CHUNKED
-#define NC_CHUNKED 0
-#endif
         // time and time_bnds chunking
         for (i = 0; i < pVar->ndims; i++) {
             if (cmor_axes[pVar->axes_ids[i]].axis == 'T') {
@@ -5685,7 +5796,9 @@ void cmor_create_var_attributes(int var_id, int ncid, int ncafid,
                     time_chunk_size = cmor_axes[pVar->axes_ids[i]].length;
                 }
 
-                ierr = nc_def_var_chunking(ncid, nc_vars[i], NC_CHUNKED, &time_chunk_size);
+                ierr = cmor_nc_def_var_chunking_clamped(ncid, nc_vars[i],
+                                                        NC_CHUNKED,
+                                                        &time_chunk_size);
                 
                 if (ierr != NC_NOERR) {
                     cmor_handle_error_var_variadic(
@@ -5700,8 +5813,10 @@ void cmor_create_var_attributes(int var_id, int ncid, int ncafid,
                 // set to 2.
                 if (nc_bnds_vars[i] != -1) {
                     size_t time_bnds_chunk_sizes[2] = {time_chunk_size, 2};
-                    ierr = nc_def_var_chunking(ncafid, nc_bnds_vars[i], 
-                                                NC_CHUNKED, time_bnds_chunk_sizes);
+                    ierr = cmor_nc_def_var_chunking_clamped(ncafid,
+                                                            nc_bnds_vars[i],
+                                                            NC_CHUNKED,
+                                                            time_bnds_chunk_sizes);
                     
                     if (ierr != NC_NOERR) {
                         cmor_handle_error_var_variadic(

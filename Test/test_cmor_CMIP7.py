@@ -7,7 +7,7 @@ from pathlib import Path
 from netCDF4 import Dataset
 
 CMIP7_TABLES_PATH = "cmip7-cmor-tables/tables"
-CV_PATH = "TestTables/CMIP7_CV.json"
+CV_PATH = "cmip7-cmor-tables/tables-cvs/cmor-cvs.json"
 
 USER_INPUT = {
     "_AXIS_ENTRY_FILE": "CMIP7_coordinate.json",
@@ -17,19 +17,17 @@ USER_INPUT = {
     "activity_id": "CMIP",
     "calendar": "360_day",
     "cv_version": "6.2.19.0",
-    "drs_specs": "MIP-DRS7",
-    "experiment_id": "piControl",
-    "forcing_index": "f30",
-    "grid_label": "gn",
-    "initialization_index": "i000001d",
-    "institution_id": "PCMDI",
-    "license_id": "CC BY 4.0",
-    "nominal_resolution": "250 km",
+    "experiment_id": "amip",
+    "forcing_index": "f3",
+    "grid_label": "g999",
+    "initialization_index": "i1",
+    "institution_id": "CCCma",
+    "license_id": "CC-BY-4.0",
+    "nominal_resolution": "100 km",
     "outpath": ".",
     "physics_index": "p1",
-    "realization_index": "r009",
-    "source_id": "PCMDI-test-1-0",
-    "tracking_prefix": "hdl:21.14100",
+    "realization_index": "r9",
+    "source_id": "ACCESS-ESM1-6",
     "host_collection": "CMIP7",
     "frequency": "mon",
     "region": "glb",
@@ -40,6 +38,24 @@ USER_INPUT = {
 
 
 class TestCMIP7(unittest.TestCase):
+
+    def _load_dataset(self, updated_fields=None, removed_fields=None):
+        input_data = USER_INPUT.copy()
+
+        if removed_fields is not None:
+            for field in removed_fields:
+                input_data.pop(field, None)
+
+        if updated_fields is not None:
+            input_data.update(updated_fields)
+
+        with open(self.input_json, "w") as input_file_handle:
+            json.dump(input_data, input_file_handle, sort_keys=True, indent=4)
+
+        error_flag = cmor.dataset_json(str(self.input_json))
+        if error_flag:
+            raise RuntimeError("CMOR dataset_json call failed")
+
     def setUp(self):
         """
         Write out a simple file using CMOR
@@ -53,15 +69,12 @@ class TestCMIP7(unittest.TestCase):
         with open(self.input_json, "w") as input_file_handle:
             json.dump(USER_INPUT, input_file_handle, sort_keys=True, indent=4)
 
-        # read dataset info
-        error_flag = cmor.dataset_json(str(self.input_json))
-        if error_flag:
-            raise RuntimeError("CMOR dataset_json call failed")
-
     def tearDown(self):
         self.input_json.unlink(missing_ok=True)
 
     def test_cmip7(self):
+        self._load_dataset()
+
         data = [27] * (2 * 3 * 4)
         tos = numpy.array(data)
         tos.shape = (2, 3, 4)
@@ -107,7 +120,7 @@ class TestCMIP7(unittest.TestCase):
             'frequency': 'mon',
             'archive_id': 'WCRP',
             'mip_era': 'CMIP7',
-            'data_specs_version': 'CMIP-7.0.0.0',
+            'data_specs_version': 'MIP-DS7.1.0.0',
             'host_collection': 'CMIP7',
         }
 
@@ -115,14 +128,15 @@ class TestCMIP7(unittest.TestCase):
             self.assertIn(attr, attrs)
             self.assertEqual(val, ds.getncattr(attr))
         institution_id = USER_INPUT["institution_id"]
-        license_id = "CC BY 4.0"
+        license_id = "CC-BY-4.0"
         license_type = "Creative Commons Attribution 4.0 International"
-        license_url = "https://creativecommons.org/licenses/by/4.0/"
+        license_url = "https://creativecommons.org/licenses/by/4.0"
         license = \
             (f"{license_id}; CMIP7 data produced by {institution_id} is "
              f"licensed under a {license_type} License ({license_url}). "
              "Consult https://wcrp-cmip.github.io/cmip7-guidance/docs/CMIP7/"
-             "Guidance_for_users for terms of "
+             "Guidance_for_users/#2-terms-of-use-and-citations-requirements "
+             "for terms of "
              "use governing CMIP7 output, including citation requirements and "
              "proper acknowledgment. The data producers and data providers "
              "make no warranty, either express or implied, including, but not "
@@ -137,10 +151,13 @@ class TestCMIP7(unittest.TestCase):
         self.assertTrue("license_url" not in attrs)
         self.assertEqual(license, ds.getncattr("license"))
         self.assertEqual(license_id, ds.getncattr("license_id"))
+        self.assertIn("Name: CMIP7_ocean.json;", ds.getncattr("table_info"))
 
         ds.close()
 
     def test_secondary_modeling_realm(self):
+        self._load_dataset()
+
         data = [27] * (2 * 3 * 4)
         pr = numpy.array(data)
         pr.shape = (2, 3, 4)
@@ -186,7 +203,7 @@ class TestCMIP7(unittest.TestCase):
             'frequency': 'mon',
             'archive_id': 'WCRP',
             'mip_era': 'CMIP7',
-            'data_specs_version': 'CMIP-7.0.0.0',
+            'data_specs_version': 'MIP-DS7.1.0.0',
             'host_collection': 'CMIP7',
             'realm': 'atmos land landIce',
         }
@@ -198,6 +215,8 @@ class TestCMIP7(unittest.TestCase):
         ds.close()
 
     def test_climatology(self):
+        self._load_dataset()
+
         data = numpy.array([27, 28])
         time = numpy.array([15, 45])
         time_bnds = numpy.array([[0, 31], [31, 60]])
@@ -219,6 +238,30 @@ class TestCMIP7(unittest.TestCase):
         time_var = ds.variables["time"]
         self.assertEqual("climatology_bnds", time_var.getncattr("climatology"))
         self.assertEqual("Monthly Climatology", time_var.getncattr("long_name"))
+
+        ds.close()
+
+    def test_conventions_set_by_user(self):
+        conventions = "CF-1.13"
+        self._load_dataset(updated_fields={"Conventions": conventions})
+
+        data = numpy.array([27, 28])
+        time = numpy.array([15, 45])
+        time_bnds = numpy.array([[0, 31], [31, 60]])
+        cmor.load_table("CMIP7_atmos.json")
+        cmortime = cmor.axis("time2",
+                             coord_vals=time,
+                             cell_bounds=time_bnds,
+                             units="days since 2018")
+        cmorco2 = cmor.variable("co2_tclm-u-hm-u", "mol mol-1", [cmortime])
+        self.assertEqual(cmor.write(cmorco2, data), 0)
+        filename = cmor.close(cmorco2, file_name=True)
+        self.assertEqual(cmor.close(), 0)
+
+        ds = Dataset(filename)
+        self.assertEqual(conventions, ds.getncattr("Conventions"))
+        self.assertIn(f"CMOR rewrote data to be consistent with {conventions} "
+                      "and CMIP7 data requirements.", ds.getncattr("history"))
 
         ds.close()
 

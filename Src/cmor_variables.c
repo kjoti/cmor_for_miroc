@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <signal.h>
+#include <libgen.h>
 
 float fvalue;
 
@@ -1270,14 +1271,12 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
     if ((comment != NULL) && (comment[0] != '\0') &&
         strcmp(comment, COMMENT_VARIABLE_ZFACTOR) != 0) {
         if (cmor_has_variable_attribute(vrid, VARIABLE_ATT_COMMENT) == 0) {
-            char szActivity[CMOR_MAX_STRING];
-
-            cmor_get_cur_dataset_attribute(GLOBAL_ATT_ACTIVITY_ID, szActivity);
+            char *table_path = cmor_tables[cmor_vars[vrid].ref_table_id].path;
 
             strncpy(msg, comment, CMOR_MAX_STRING);
             strncat(msg, ", ", CMOR_MAX_STRING - strlen(msg));
-            strncat(msg, szActivity, CMOR_MAX_STRING - strlen(msg));
-            strncat(msg, "_table_comment: ", CMOR_MAX_STRING - strlen(msg));
+            strncat(msg, basename(table_path), CMOR_MAX_STRING - strlen(msg));
+            strncat(msg, " comment: ", CMOR_MAX_STRING - strlen(msg));
             strncat(msg, refvar.comment, CMOR_MAX_STRING - strlen(msg));
 
         } else {
@@ -3450,7 +3449,7 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                 );
             }
 
-            if (time_axis_count > 0) {
+            if (time_axis_count > 0 && refaxis->climatology == 0) {
                 ierr = cmor_check_interval(avar->axes_ids[0], units,
                                             time_axis_vals,
                                             time_axis_count, 0);
@@ -3478,6 +3477,17 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     avar->id,
                     cmor_tables[avar->ref_table_id].szTable_id,
                     ntimes_passed);
+                if (mtype == 'd')
+                    free(data_tmp);
+                else if (mtype == 'f')
+                    free(fdata_tmp);
+                else if (mtype == 'l')
+                    free(ldata_tmp);
+                else if (mtype == 'i')
+                    free(idata_tmp);
+
+                cmor_pop_traceback();
+                return (1);
             }
             if (cmor_axes[avar->axes_ids[0]].bounds != NULL) {
 /* -------------------------------------------------------------------- */
@@ -3581,7 +3591,17 @@ int cmor_write_var_to_file(int ncid, cmor_var_t * avar, void *data,
                     avar->id,
                     cmor_tables[avar->ref_table_id].szTable_id,
                     ntimes_passed);
+                if (mtype == 'd')
+                    free(data_tmp);
+                else if (mtype == 'f')
+                    free(fdata_tmp);
+                else if (mtype == 'l')
+                    free(ldata_tmp);
+                else if (mtype == 'i')
+                    free(idata_tmp);
 
+                cmor_pop_traceback();
+                return (1);
             }
 
             avar->first_bound = 1.e20;

@@ -1,6 +1,7 @@
 *.[oa]
 *~
 *.nc
+!notebooks/data/*.nc
 *.pyc
 *.gcno
 *.gcda
@@ -15,6 +16,7 @@ CMIP5
 Makefile
 build
 dist
+wheelhouse
 test_bin
 tests
 tests_html
@@ -28,3 +30,6 @@ include/cmor_locale.h
 recipes/cmor/meta.yaml
 CMOR.egg-info
 cmor.log*
+venv/
+notebooks/output/
+.ipynb_checkpoints/

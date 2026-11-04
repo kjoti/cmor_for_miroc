@@ -14,11 +14,18 @@ jobs:
     strategy:
       matrix:
         runner:
+          - RUNNER_OS: 'ubuntu-24.04'
+            OS: linux-64
+            OS_NAME: linux_64
+            MINIFORGE_INSTALLER_URL: https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+            C_COMPILER: gcc_linux-64
+            FORTRAN_COMPILER: gfortran_linux-64
+            PROJECT_DIR: workdir/linux_64
           - RUNNER_OS: 'macos-14'
             OS: osx-arm64
             OS_NAME: osx_arm64
             MINIFORGE_INSTALLER_URL: https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-arm64.sh
-            C_COMPILER: clang_osx-arm64 
+            C_COMPILER: clang_osx-arm64
             FORTRAN_COMPILER: gfortran_osx-arm64
             PROJECT_DIR: workdir/macos_arm64
           - RUNNER_OS: 'macos-15-intel'
@@ -28,11 +35,11 @@ jobs:
             C_COMPILER: clang_osx-64 
             FORTRAN_COMPILER: gfortran_osx-64
             PROJECT_DIR: workdir/macos_64
-        python_version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python_version: ['3.11', '3.12', '3.13', '3.14']
     runs-on: ${{ matrix.runner.RUNNER_OS }}
     env:
       PACKAGE_NAME: cmor
-      PACKAGE_VERSION: 3.14.0
+      PACKAGE_VERSION: 3.15.3
       PYTHON_VERSION: ${{ matrix.python_version }}
       CONDA_FORGE_CHANNEL: conda-forge
       CONDA_USER: pcmdi
@@ -132,6 +139,9 @@ jobs:
           ./configure --prefix=$CONDA_PREFIX --with-python --with-uuid=$CONDA_PREFIX --with-json-c=$CONDA_PREFIX --with-udunits2=$CONDA_PREFIX --with-netcdf=$CONDA_PREFIX  --enable-verbose-test
           export HDF5_PLUGIN_PATH="$(python -c 'import hdf5plugin; print(hdf5plugin.PLUGINS_PATH)')"
           make test -o cmor -o python
+
+          cd examples/fortran
+          ./run_examples.sh
 
       - name: Conda Upload
         env:
