@@ -2,7 +2,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 
 dnl AC_PREREQ([2.71])
-AC_INIT([cmor],[3.9.0],[mauzey1@llnl.gov])
+AC_INIT([cmor],[3.10.0],[mauzey1@llnl.gov])
 
 GIT_TAG=`cd $srcdir ; ./get_git_version.sh`
 
@@ -221,12 +221,12 @@ if [ test x${with_udunits2} != xyes ] ; then
      UDUNITS2LDFLAGS=" -L${with_udunits2}/lib -ludunits2"
    fi
   else
-    UDUNITS2FLAGS="-ludunits2"
-    UDUNITS2LDFLAGS=""
+    UDUNITS2LDFLAGS="-ludunits2"
+    UDUNITS2FLAGS=""
   fi
 else
-  UDUNITS2FLAGS="-ludunits2"
-  UDUNITS2LDFLAGS=""
+  UDUNITS2LDFLAGS="-ludunits2"
+  UDUNITS2FLAGS=""
 fi
 AC_CHECK_LIB([udunits2],[ut_parse],[],[AC_MSG_ERROR(Could not get a working udunits2)],[ ${UDUNITS2FLAGS} ${UDUNITS2LDFLAGS} -lm  ])
 LIBS=""
@@ -248,8 +248,8 @@ if [ test x${with_netcdf} != xyes ]; then
      fi
     fi
   else
-    NCCFLAGS="-lnetcdf"
-    NCLDFLAGS=""
+    NCLDFLAGS="-lnetcdf"
+    NCCFLAGS=""
   fi
 else
   AC_PATH_PROG(NCCONFIG,nc-config,"no")
@@ -257,8 +257,8 @@ else
    NCCFLAGS=`${NCCONFIG} --cflags`
    NCLDFLAGS=`${NCCONFIG} --libs`
   else
-   NCCFLAGS="-lnetcdf"
-   NCLDFLAGS=""
+   NCLDFLAGS="-lnetcdf"
+   NCCFLAGS=""
   fi
 fi
 LIBS=""
