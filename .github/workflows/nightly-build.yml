@@ -21,18 +21,18 @@ jobs:
             C_COMPILER: clang_osx-arm64 
             FORTRAN_COMPILER: gfortran_osx-arm64
             PROJECT_DIR: workdir/macos_arm64
-          - RUNNER_OS: 'macos-13'
+          - RUNNER_OS: 'macos-15-intel'
             OS: osx-64
             OS_NAME: osx_64
             MINIFORGE_INSTALLER_URL: https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh
             C_COMPILER: clang_osx-64 
             FORTRAN_COMPILER: gfortran_osx-64
             PROJECT_DIR: workdir/macos_64
-        python_version: ['3.10', '3.11', '3.12', '3.13']
+        python_version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     runs-on: ${{ matrix.runner.RUNNER_OS }}
     env:
       PACKAGE_NAME: cmor
-      PACKAGE_VERSION: 3.12.0
+      PACKAGE_VERSION: 3.13.2
       PYTHON_VERSION: ${{ matrix.python_version }}
       CONDA_FORGE_CHANNEL: conda-forge
       CONDA_USER: pcmdi
@@ -124,7 +124,7 @@ jobs:
 
           export CMOR_CHANNEL=file://$HOME/cmor_conda_pkgs/
 
-          mamba create -y -n test_py$PYTHON_VERSION -c $CMOR_CHANNEL -c $CONDA_FORGE_CHANNEL python=$PYTHON_VERSION $PACKAGE_NAME=$PACKAGE_VERSION $C_COMPILER $FORTRAN_COMPILER
+          mamba create -y -n test_py$PYTHON_VERSION -c $CMOR_CHANNEL -c $CONDA_FORGE_CHANNEL $CMOR_CHANNEL::$PACKAGE_NAME=$PACKAGE_VERSION python=$PYTHON_VERSION $C_COMPILER $FORTRAN_COMPILER
           mamba activate test_py$PYTHON_VERSION
 
           ./configure --prefix=$CONDA_PREFIX --with-python --with-uuid=$CONDA_PREFIX --with-json-c=$CONDA_PREFIX --with-udunits2=$CONDA_PREFIX --with-netcdf=$CONDA_PREFIX  --enable-verbose-test

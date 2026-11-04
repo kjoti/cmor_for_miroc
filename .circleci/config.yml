@@ -1,6 +1,7 @@
 version: 2.1
 
 checkout:
+  method: full
   post:
     - ./ci-support/checkout_merge_commit.sh
         
@@ -96,7 +97,7 @@ aliases:
        mamba activate
        export CMOR_CHANNEL=$HOME/cmor_conda_pkgs/
        set +e
-       mamba create -y -n test_py$PYTHON_VERSION -c file://$CMOR_CHANNEL $CHANNELS python=$PYTHON_VERSION $PKG_NAME=$VERSION $CONDA_COMPILERS
+       mamba create -y -n test_py$PYTHON_VERSION -c file://$CMOR_CHANNEL $CHANNELS file://$CMOR_CHANNEL::$PKG_NAME=$VERSION python=$PYTHON_VERSION $CONDA_COMPILERS
        mamba activate test_py$PYTHON_VERSION
        set -e
        ./configure --prefix=$CONDA_PREFIX --with-python --with-uuid=$CONDA_PREFIX --with-json-c=$CONDA_PREFIX --with-udunits2=$CONDA_PREFIX --with-netcdf=$CONDA_PREFIX  --enable-verbose-test
@@ -141,11 +142,12 @@ jobs:
       executor: << parameters.os >>
       environment:
          PKG_NAME: "cmor"
-         VERSION: "3.12.0"
+         VERSION: "3.13.2"
          PYTHON_VERSION: << parameters.python_version >>
          CHANNELS: "-c conda-forge"
       steps:
-         - checkout
+         - checkout:
+            method: full
          - attach_workspace:
             at: .
          - run: *setup_env
@@ -168,7 +170,8 @@ jobs:
          USER: "pcmdi"
          LABEL: "nightly"
       steps:
-         - checkout
+         - checkout:
+            method: full
          - attach_workspace:
               at: .
          - run: *setup_env
@@ -184,7 +187,8 @@ jobs:
          USER: "pcmdi"
          LABEL: "testing"
       steps:
-         - checkout
+         - checkout:
+            method: full
          - attach_workspace:
               at: .
          - run: *setup_env
@@ -198,7 +202,7 @@ workflows:
               matrix:
                  parameters:
                     os: [ linux ]
-                    python_version: [ "3.10", "3.11", "3.12", "3.13" ]
+                    python_version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
               name: build-<< matrix.os >>-<< matrix.python_version >>
 
          - upload:

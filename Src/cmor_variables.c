@@ -205,7 +205,6 @@ int cmor_set_variable_attribute(int id, char *attribute_name, char type,
         (strcmp(attribute_name, VARIABLE_ATT_MISSINGVALUES) == 0) ||
         (strcmp(attribute_name, VARIABLE_ATT_FILLVAL) == 0) ||
         (strcmp(attribute_name, VARIABLE_ATT_STANDARDNAME) == 0) ||
-        (strcmp(attribute_name, VARIABLE_ATT_LONGNAME) == 0) ||
         (strcmp(attribute_name, VARIABLE_ATT_FLAGVALUES) == 0) ||
         (strcmp(attribute_name, VARIABLE_ATT_FLAGMEANING) == 0) ||
         (strcmp(attribute_name, VARIABLE_ATT_COMMENT) == 0) ||
@@ -1165,6 +1164,7 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
         strncpy(cmor_vars[vrid].id, refvar.out_name, CMOR_MAX_STRING);
     }
 
+    strncpy(cmor_vars[vrid].branded_variable, refvar.branded_variable, CMOR_MAX_STRING);
     strncpy(cmor_vars[vrid].branding_suffix, refvar.branding_suffix, CMOR_MAX_STRING);
     strncpy(cmor_vars[vrid].temporal_label, refvar.temporal_label, CMOR_MAX_STRING);
     strncpy(cmor_vars[vrid].vertical_label, refvar.vertical_label, CMOR_MAX_STRING);
@@ -1951,22 +1951,22 @@ void cmor_init_var_def(cmor_var_def_t * var, int table_id)
 
     cmor_is_setup();
     var->table_id = table_id;
-    var->standard_name[0] = '\0';
-    var->variable_title[0] = '\0';
-    var->brand_description[0] = '\0';
-    var->units[0] = '\0';
-    var->cell_methods[0] = '\0';
-    var->cell_measures[0] = '\0';
+    memset(var->standard_name, 0, sizeof(var->standard_name));
+    memset(var->variable_title, 0, sizeof(var->variable_title));
+    memset(var->brand_description, 0, sizeof(var->brand_description));
+    memset(var->units, 0, sizeof(var->units));
+    memset(var->cell_methods, 0, sizeof(var->cell_methods));
+    memset(var->cell_measures, 0, sizeof(var->cell_measures));
     var->positive = cmor_tables[table_id].positive;
-    var->long_name[0] = '\0';
-    var->comment[0] = '\0';
-    var->realm[0] = '\0';
-    var->frequency[0] = '\0';
-    var->out_name[0] = '\0';
+    memset(var->long_name, 0, sizeof(var->long_name));
+    memset(var->comment, 0, sizeof(var->comment));
+    memset(var->realm, 0, sizeof(var->realm));
+    memset(var->frequency, 0, sizeof(var->frequency));
+    memset(var->out_name, 0, sizeof(var->out_name));
     var->ndims = 0;
-    var->flag_values[0] = '\0';
-    var->flag_meanings[0] = '\0';
-    var->chunking_dimensions[0] = '\0';
+    memset(var->flag_values, 0, sizeof(var->flag_values));
+    memset(var->flag_meanings, 0, sizeof(var->flag_meanings));
+    memset(var->chunking_dimensions, 0, sizeof(var->chunking_dimensions));
     for (n = 0; n < CMOR_MAX_DIMENSIONS; n++)
         var->dimensions[n] = -1;
     var->type = cmor_tables[table_id].type;
@@ -1978,12 +1978,13 @@ void cmor_init_var_def(cmor_var_def_t * var, int table_id)
     var->deflate = 1;
     var->deflate_level = 1;
     var->zstandard_level = -999999;
-    var->generic_level_name[0] = '\0';
-    var->branding_suffix[0] = '\0';
-    var->temporal_label[0] = '\0';
-    var->vertical_label[0] = '\0';
-    var->horizontal_label[0] = '\0';
-    var->area_label[0] = '\0';
+    memset(var->generic_level_name, 0, sizeof(var->generic_level_name));
+    memset(var->branded_variable, 0, sizeof(var->branded_variable));
+    memset(var->branding_suffix, 0, sizeof(var->branding_suffix));
+    memset(var->temporal_label, 0, sizeof(var->temporal_label));
+    memset(var->vertical_label, 0, sizeof(var->vertical_label));
+    memset(var->horizontal_label, 0, sizeof(var->horizontal_label));
+    memset(var->area_label, 0, sizeof(var->area_label));
 }
 
 /************************************************************************/
@@ -2236,6 +2237,10 @@ int cmor_set_var_def_att(cmor_var_def_t * var, char *att, char *val)
     } else if (strcmp(att, VARIABLE_ATT_OUTNAME) == 0) {
 
         strncpy(var->out_name, val, CMOR_MAX_STRING);
+
+    } else if (strcmp(att, VARIABLE_ATT_BRANDEDVARIABLE) == 0) {
+
+        strncpy(var->branded_variable, val, CMOR_MAX_STRING);
 
     } else if (strcmp(att, VARIABLE_ATT_BRANDINGSUFFIX) == 0) {
 

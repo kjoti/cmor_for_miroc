@@ -5,23 +5,26 @@ import numpy
 
 from netCDF4 import Dataset
 
-DATASET_INFO = {
-    "_AXIS_ENTRY_FILE": "Tables/CMIP6_coordinate.json",
-    "_FORMULA_VAR_FILE": "Tables/CMIP6_formula_terms.json",
+CMIP7_TABLES_PATH = "cmip7-cmor-tables/tables"
+CV_PATH = "TestTables/CMIP7_CV.json"
+
+USER_INPUT = {
+    "_AXIS_ENTRY_FILE": "CMIP7_coordinate.json",
+    "_FORMULA_VAR_FILE": "CMIP7_formula_terms.json",
     "_cmip7_option": 1,
-    "_controlled_vocabulary_file": "TestTables/CMIP7_CV.json",
+    "_controlled_vocabulary_file": CV_PATH,
     "activity_id": "CMIP",
     "branch_method": "standard",
     "branch_time_in_child": 30.0,
     "branch_time_in_parent": 10800.0,
     "calendar": "360_day",
     "cv_version": "6.2.19.0",
-    "experiment": "1 percent per year increase in CO2",
-    "experiment_id": "1pctCO2",
-    "forcing_index": "3",
+    "experiment": "Simulation of the pre-industrial climate",
+    "experiment_id": "piControl",
+    "forcing_index": "f30",
     "grid": "N96",
     "grid_label": "gn",
-    "initialization_index": "1",
+    "initialization_index": "i000001d",
     "institution_id": "PCMDI",
     "license_id": "CC BY 4.0",
     "nominal_resolution": "250 km",
@@ -32,8 +35,8 @@ DATASET_INFO = {
     "parent_source_id": "PCMDI-test-1-0",
     "parent_experiment_id": "piControl",
     "parent_variant_label": "r1i1p1f3",
-    "physics_index": "1",
-    "realization_index": "9",
+    "physics_index": "p1",
+    "realization_index": "r009",
     "source_id": "PCMDI-test-1-0",
     "source_type": "AOGCM CHEM BGC",
     "tracking_prefix": "hdl:21.14100",
@@ -52,11 +55,11 @@ class TestCMIP7(unittest.TestCase):
         Write out a simple file using CMOR
         """
         # Set up CMOR
-        cmor.setup(inpath="TestTables", netcdf_file_action=cmor.CMOR_REPLACE)
+        cmor.setup(inpath=CMIP7_TABLES_PATH, netcdf_file_action=cmor.CMOR_REPLACE)
 
-        # Define dataset using DATASET_INFO
+        # Define dataset using USER_INPUT
         with open("Test/input_cmip7.json", "w") as input_file_handle:
-            json.dump(DATASET_INFO, input_file_handle, sort_keys=True, indent=4)
+            json.dump(USER_INPUT, input_file_handle, sort_keys=True, indent=4)
 
         # read dataset info
         error_flag = cmor.dataset_json("Test/input_cmip7.json")
@@ -64,13 +67,8 @@ class TestCMIP7(unittest.TestCase):
             raise RuntimeError("CMOR dataset_json call failed")
 
     def test_cmip7(self):
-        tos = numpy.array([27, 27, 27, 27,
-                           27, 27, 27, 27,
-                           27, 27, 27, 27,
-                           27, 27, 27, 27,
-                           27, 27, 27, 27,
-                           27, 27, 27, 27
-                           ])
+        data = [27] * (2 * 3 * 4)
+        tos = numpy.array(data)
         tos.shape = (2, 3, 4)
         lat = numpy.array([10, 20, 30])
         lat_bnds = numpy.array([5, 15, 25, 35])
@@ -82,7 +80,7 @@ class TestCMIP7(unittest.TestCase):
                                 ])
         time = numpy.array([15.5, 45])
         time_bnds = numpy.array([0, 31, 60])
-        cmor.load_table("CMIP7_ocean2d.json")
+        cmor.load_table("CMIP7_ocean.json")
         cmorlat = cmor.axis("latitude",
                             coord_vals=lat,
                             cell_bounds=lat_bnds,
@@ -104,6 +102,7 @@ class TestCMIP7(unittest.TestCase):
         ds = Dataset(filename)
         attrs = ds.ncattrs()
         test_attrs = {
+            'branded_variable': 'tos_tavg-u-hxy-sea',
             'branding_suffix': 'tavg-u-hxy-sea',
             'temporal_label': 'tavg',
             'vertical_label': 'u',
@@ -118,9 +117,9 @@ class TestCMIP7(unittest.TestCase):
         }
 
         for attr, val in test_attrs.items():
-            self.assertTrue(attr in attrs)
+            self.assertIn(attr, attrs)
             self.assertEqual(val, ds.getncattr(attr))
-        institution_id = DATASET_INFO["institution_id"]
+        institution_id = USER_INPUT["institution_id"]
         license_id = "CC BY 4.0"
         license_type = "Creative Commons Attribution 4.0 International"
         license_url = "https://creativecommons.org/licenses/by/4.0/"
@@ -141,6 +140,63 @@ class TestCMIP7(unittest.TestCase):
         self.assertTrue("license_type" not in attrs)
         self.assertTrue("license_url" not in attrs)
         self.assertEqual(license, ds.getncattr("license"))
+
+        ds.close()
+
+    def test_secondary_modeling_realm(self):
+        data = [27] * (2 * 3 * 4)
+        pr = numpy.array(data)
+        pr.shape = (2, 3, 4)
+        lat = numpy.array([10, 20, 30])
+        lat_bnds = numpy.array([5, 15, 25, 35])
+        lon = numpy.array([0, 90, 180, 270])
+        lon_bnds = numpy.array([-45, 45,
+                                135,
+                                225,
+                                315
+                                ])
+        time = numpy.array([15.5, 45])
+        time_bnds = numpy.array([0, 31, 60])
+        cmor.load_table("CMIP7_atmos.json")
+        cmorlat = cmor.axis("latitude",
+                            coord_vals=lat,
+                            cell_bounds=lat_bnds,
+                            units="degrees_north")
+        cmorlon = cmor.axis("longitude",
+                            coord_vals=lon,
+                            cell_bounds=lon_bnds,
+                            units="degrees_east")
+        cmortime = cmor.axis("time",
+                             coord_vals=time,
+                             cell_bounds=time_bnds,
+                             units="days since 2018")
+        axes = [cmortime, cmorlat, cmorlon]
+        cmorpr = cmor.variable("prra_tavg-u-hxy-is", "kg m-2 s-1", axes)
+        self.assertEqual(cmor.write(cmorpr, pr), 0)
+        filename = cmor.close(cmorpr, file_name=True)
+        self.assertEqual(cmor.close(), 0)
+
+        ds = Dataset(filename)
+        attrs = ds.ncattrs()
+        test_attrs = {
+            'branded_variable': 'prra_tavg-u-hxy-is',
+            'branding_suffix': 'tavg-u-hxy-is',
+            'temporal_label': 'tavg',
+            'vertical_label': 'u',
+            'horizontal_label': 'hxy',
+            'area_label': 'is',
+            'region': 'glb',
+            'frequency': 'mon',
+            'archive_id': 'WCRP',
+            'mip_era': 'CMIP7',
+            'data_specs_version': 'CMIP-7.0.0.0',
+            'host_collection': 'CMIP7',
+            'realm': 'atmos land landIce',
+        }
+
+        for attr, val in test_attrs.items():
+            self.assertIn(attr, attrs)
+            self.assertEqual(val, ds.getncattr(attr))
 
         ds.close()
 
