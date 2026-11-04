@@ -17,6 +17,7 @@ extern void cmor_set_terminate_signal_to_sigint();
 extern void cmor_set_terminate_signal_to_sigterm();
 extern void cmor_set_terminate_signal( int );
 extern int cmor_get_terminate_signal();
+extern double cmor_get_frequency_interval( char *frequency );
 extern void cmor_is_setup( void );
 extern void cmor_add_traceback( char *name );
 extern void cmor_pop_traceback( void );
@@ -48,6 +49,7 @@ extern int cmor_set_cur_dataset_attribute( char *name, char *value,
 					   int optional );
 extern int cmor_set_cur_dataset_attribute_internal( char *name, char *value,
                                            int optional );
+extern int cmor_remove_cur_dataset_attribute( char *name );
 
 extern int cmor_get_cur_dataset_attribute( char *name, char *value );
 extern int cmor_has_cur_dataset_attribute( char *name );
@@ -94,8 +96,7 @@ extern void cmor_define_dimensions(int var_id, int ncid,
                             int ncafid, double *time_bounds,
                             int *nc_dim,
                             int *nc_vars, int *nc_bnds_vars,
-                            int *nc_vars_af,
-                            size_t *nc_dim_chunking, int *dim_bnds,
+                            int *nc_vars_af, int *dim_bnds,
                             int *zfactors, int *nc_zfactors,
                             int *nc_dim_af, int *nzfactors);
 
@@ -104,7 +105,7 @@ extern void cmor_create_var_attributes(int var_id, int ncid, int ncafid,
                                        int *nc_vars_af, int *nc_associated_vars,
                                        int *nc_singletons, int *nc_singletons_bnds,
                                        int *nc_zfactors, int *zfactors, int nzfactors,
-                                       size_t *nc_dim_chunking, char *outname);
+                                       char *outname);
 
 extern int cmor_grids_def(int var_id, int nGridID, int ncafid, int *nc_dim_af,
         int *nc_associated_vars);
@@ -124,10 +125,6 @@ extern int cmor_CV_checkISOTime(char *szAttribute);
 extern void cmor_CV_set_att(cmor_CV_def_t *CV,
                                 char *key,
                                 json_object *joValue);
-extern int cmor_CV_checkFilename(cmor_CV_def_t *CV, int var_id,
-        char *szInTimeCalendar,
-        char *szInTimeUnits,
-        char *infile);
 extern int cmor_CV_checkParentExpID(cmor_CV_def_t *CV);
 extern int cmor_CV_checkSubExpID(cmor_CV_def_t *CV);
 extern int cmor_CV_checkExperiment( cmor_CV_def_t *CV);
@@ -234,8 +231,7 @@ extern int cmor_set_deflate( int var_id, int shuffle,
 extern int cmor_set_zstandard( int var_id, int zstandard_level );
 extern int cmor_set_quantize( int var_id, int quantize_mode, 
                               int quantize_nsd );
-extern int cmor_set_chunking( int var_id, int nTableID,
-							    size_t nc_dim_chunking[]);
+extern int cmor_set_chunking( int var_id, int *nc_dim_chunking);
 
 extern int cmor_set_var_def_att( cmor_var_def_t * var, char *att,
                                     char *val);

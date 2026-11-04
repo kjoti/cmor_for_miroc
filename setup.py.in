@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy
 import os
 from setuptools import setup, Extension
@@ -51,7 +50,7 @@ print('src:',srcfiles)
 print('macros:',macros)
 
 setup (name = "CMOR",
-       version='3.13.2',
+       version='3.14.3',
        author='Chris Mauzey, LLNL',
        description = "Python Interface to CMOR output library",
        url = "https://cmor.llnl.gov/",

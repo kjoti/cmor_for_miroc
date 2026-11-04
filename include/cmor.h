@@ -2,9 +2,8 @@
 #define CMOR_H
 
 #define CMOR_VERSION_MAJOR 3
-#define CMOR_VERSION_MINOR 13
-#define CMOR_VERSION_PATCH 2
-
+#define CMOR_VERSION_MINOR 14
+#define CMOR_VERSION_PATCH 3
 #define CMOR_CF_VERSION_MAJOR 1
 #define CMOR_CF_VERSION_MINOR 7
 
@@ -51,6 +50,9 @@
 #define CMOR_APPROX_INTERVAL_DEFAULT          0.
 #define CMOR_APPROX_INTERVAL_WARNING_DEFAULT  .1
 #define CMOR_APPROX_INTERVAL_ERROR_DEFAULT    .2
+
+#define CMOR_DEFAULT_TIME_CHUNK_SIZE 512
+#define CMOR_TIMESTEP_CHUNK_MAX_BYTES 4 * 1024 * 1024
 
 #define CMOR_INPUTFILENAME       GLOBAL_INTERNAL"dataset_json"
 #define CV_INPUTFILENAME         GLOBAL_INTERNAL"CV"
@@ -486,7 +488,6 @@ typedef struct cmor_variable_def_ {
     float valid_max;
     float ok_min_mean_abs;
     float ok_max_mean_abs;
-    char chunking_dimensions[CMOR_MAX_STRING];
     int shuffle;
     int deflate;
     int deflate_level;
@@ -544,7 +545,7 @@ typedef struct cmor_var_ {
     float valid_max;
     float ok_min_mean_abs;
     float ok_max_mean_abs;
-    char chunking_dimensions[CMOR_MAX_STRING];
+    int *chunking_dimensions;
     int shuffle;
     int deflate;
     int deflate_level;
@@ -565,7 +566,6 @@ typedef struct cmor_var_ {
     char base_path[CMOR_MAX_STRING];
     char current_path[CMOR_MAX_STRING];
     char suffix[CMOR_MAX_STRING];
-    int suffix_has_date;
     char frequency[CMOR_MAX_STRING];
     char branded_variable[CMOR_MAX_STRING];
     char branding_suffix[CMOR_MAX_STRING];

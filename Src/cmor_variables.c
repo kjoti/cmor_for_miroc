@@ -1087,7 +1087,7 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
             "Could not find a matching variable for name: '%s'", CMOR_CRITICAL, ctmp);
     }
 
-    if (iref > CMOR_MAX_ELEMENTS) {
+    if (iref >= CMOR_MAX_ELEMENTS) {
         refvar = cmor_tables[CMOR_TABLE].formula[iref - CMOR_MAX_ELEMENTS];
     } else {
         refvar = cmor_tables[CMOR_TABLE].vars[iref];
@@ -1114,15 +1114,59 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
     strcpy(cmor_vars[vrid].base_path, "");
     strcpy(cmor_vars[vrid].current_path, "");
 
-    // Get the frequency from the variable definition from the current table
-    // if it exist. Otherwise, get the frequency from the current dataset.
-    if (refvar.frequency[0] != '\0') {
-        strncpy(cmor_vars[vrid].frequency, refvar.frequency, CMOR_MAX_STRING);
-    } else if (cmor_has_cur_dataset_attribute(GLOBAL_ATT_FREQUENCY) == 0) {
-        cmor_get_cur_dataset_attribute(GLOBAL_ATT_FREQUENCY, cmor_vars[vrid].frequency);
+    char input_json[CMOR_MAX_STRING];
+    if (cmor_has_cur_dataset_attribute(CMOR_INPUTFILENAME) == 0) {
+        cmor_get_cur_dataset_attribute(CMOR_INPUTFILENAME, input_json);
+    } else {
+        strcpy(input_json, "(not specified)");
     }
 
-    cmor_vars[vrid].suffix_has_date = 0;
+    char table_json[CMOR_MAX_STRING];
+    strncpy(table_json,
+            cmor_tables[cmor_vars[vrid].ref_table_id].path,
+            CMOR_MAX_STRING);
+
+    // Skip frequency validation for zfactors since they share the time axis with their parent variable
+    // and the parent variable's frequency check already validates the shared time axis
+    int has_frequency = 0;
+    if (iref < CMOR_MAX_ELEMENTS) {
+        // Get the frequency from the variable definition from the current table
+        // if it exists. Otherwise, get the frequency from the current dataset.
+        char user_freq[CMOR_MAX_STRING];
+        user_freq[0] = '\0';
+
+        // Get user-provided frequency if it exists
+        if (cmor_has_cur_dataset_attribute(GLOBAL_ATT_FREQUENCY) == 0) {
+            cmor_get_cur_dataset_attribute(GLOBAL_ATT_FREQUENCY, user_freq);
+        }
+
+        // Check for frequency mismatch (table frequency vs user frequency)
+        if (refvar.frequency[0] != '\0' && user_freq[0] != '\0') {
+            if (strcmp(user_freq, refvar.frequency) != 0) {
+                cmor_handle_error_variadic(
+                    "Frequency mismatch detected.\n! "
+                    "Input JSON frequency: '%s' (from %s)\n! "
+                    "Table frequency: '%s' (from %s)\n! "
+                    "For CMIP6 tables, the frequency in your input JSON must match the table frequency.\n! "
+                    "Please update your input JSON to use frequency='%s'.",
+                    CMOR_WARNING,
+                    user_freq,
+                    input_json,
+                    refvar.frequency,
+                    table_json,
+                    refvar.frequency);
+            }
+        }
+
+        // Set frequency with priority: table > user
+        if (refvar.frequency[0] != '\0') {
+            strncpy(cmor_vars[vrid].frequency, refvar.frequency, CMOR_MAX_STRING);
+            has_frequency = 1;
+        } else if (user_freq[0] != '\0') {
+            strncpy(cmor_vars[vrid].frequency, user_freq, CMOR_MAX_STRING);
+            has_frequency = 1;
+        }
+    }
 
 /* -------------------------------------------------------------------- */
 /*      output missing value                                            */
@@ -1153,7 +1197,6 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
     cmor_vars[vrid].deflate = refvar.deflate;
     cmor_vars[vrid].deflate_level = refvar.deflate_level;
     cmor_vars[vrid].zstandard_level = refvar.zstandard_level;
-    strcpy(cmor_vars[vrid].chunking_dimensions, refvar.chunking_dimensions);
 
     cmor_vars[vrid].quantize_mode = NC_NOQUANTIZE;
     cmor_vars[vrid].quantize_nsd = 1;
@@ -1170,6 +1213,8 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
     strncpy(cmor_vars[vrid].vertical_label, refvar.vertical_label, CMOR_MAX_STRING);
     strncpy(cmor_vars[vrid].horizontal_label, refvar.horizontal_label, CMOR_MAX_STRING);
     strncpy(cmor_vars[vrid].area_label, refvar.area_label, CMOR_MAX_STRING);
+
+    cmor_set_chunking(vrid, NULL);
 
     cmor_set_variable_attribute_internal(vrid, VARIABLE_ATT_STANDARDNAME, 'c',
                                          refvar.standard_name);
@@ -1676,53 +1721,81 @@ int cmor_variable(int *var_id, char *name, char *units, int ndims,
             return (1);
         }
         if (cmor_axes[laxes_ids[i]].axis == 'T') {
-            // Get approximate interval values from the CV if they are defined.
-            // Otherwise, get them from the current table.
-            cv_freq_found = 0;
-            frequencies_cv = cmor_CV_rootsearch(cmor_tables[cmor_axes[cmor_naxes].
-                ref_table_id].CV, CV_KEY_FREQUENCY);
-            if(frequencies_cv != NULL) {
-                freq_cv = cmor_CV_search_child_key(frequencies_cv, cmor_vars[vrid].frequency);
-                if(freq_cv != NULL && freq_cv->nbObjects > 0) {
-                    cv_freq_found = 1;
-                    interv_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL);
-                    if(interv_cv != NULL) {
-                        approx_interval = interv_cv->dValue;
-                    } else {
-                        approx_interval = CMOR_APPROX_INTERVAL_DEFAULT;
-                    }
-                    interv_err_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL_ERR);
-                    if(interv_err_cv != NULL) {
-                        approx_interval_error = interv_err_cv->dValue;
-                    } else {
-                        approx_interval_error = CMOR_APPROX_INTERVAL_ERROR_DEFAULT;
-                    }
-                    interv_warn_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL_WRN);
-                    if(interv_warn_cv != NULL) {
-                        approx_interval_warning = interv_warn_cv->dValue;
-                    } else {
-                        approx_interval_warning = CMOR_APPROX_INTERVAL_WARNING_DEFAULT;
+            // Skip frequency checks for zfactors since they share the time axis with their parent variable
+            // and the parent variable's frequency check already validates the shared time axis
+            if (iref < CMOR_MAX_ELEMENTS) {
+                // Starting v3.14.1: require frequency for variables with time axes
+                if (!has_frequency) {
+                    cmor_handle_error_variadic(
+                        "Starting with CMOR version 3.14.1, the 'frequency' attribute is required\n! "
+                        "for all variables with a time axis.\n! "
+                        "Input JSON: %s\n! "
+                        "Table JSON: %s\n! "
+                        "Please add 'frequency' to your input JSON file, or use a variable definition that has a 'frequency' value.\n! "
+                        "Valid frequencies: 1hr, 3hr, 6hr, day, mon, yr, dec, fx (see CMIP documentation).",
+                        CMOR_CRITICAL,
+                        input_json,
+                        table_json);
+                }
+
+                // Get approximate interval values from the CV if they are defined.
+                // Otherwise, get them from the current table.
+                // As a final fallback, use hardcoded default frequency mappings.
+                cv_freq_found = 0;
+                approx_interval = CMOR_APPROX_INTERVAL_DEFAULT;
+                approx_interval_error = CMOR_APPROX_INTERVAL_ERROR_DEFAULT;
+                approx_interval_warning = CMOR_APPROX_INTERVAL_WARNING_DEFAULT;
+
+                frequencies_cv = cmor_CV_rootsearch(cmor_tables[cmor_axes[cmor_naxes].
+                    ref_table_id].CV, CV_KEY_FREQUENCY);
+                if(frequencies_cv != NULL) {
+                    freq_cv = cmor_CV_search_child_key(frequencies_cv, cmor_vars[vrid].frequency);
+                    if(freq_cv != NULL && freq_cv->nbObjects > 0) {
+                        cv_freq_found = 1;
+                        interv_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL);
+                        if(interv_cv != NULL) {
+                            approx_interval = interv_cv->dValue;
+                        }
+                        interv_err_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL_ERR);
+                        if(interv_err_cv != NULL) {
+                            approx_interval_error = interv_err_cv->dValue;
+                        }
+                        interv_warn_cv = cmor_CV_search_child_key(freq_cv, CV_KEY_APRX_INTRVL_WRN);
+                        if(interv_warn_cv != NULL) {
+                            approx_interval_warning = interv_warn_cv->dValue;
+                        }
                     }
                 }
-            }
-            if (cv_freq_found == 0) {
-                approx_interval = cmor_tables[cmor_vars[vrid].ref_table_id].interval;
-                approx_interval_error = cmor_tables[cmor_vars[vrid].ref_table_id].interval_error;
-                approx_interval_warning = cmor_tables[cmor_vars[vrid].ref_table_id].interval_warning;
-            }
 
-            if((approx_interval != cmor_axes[laxes_ids[i]].approx_interval)
-            || (approx_interval_error != cmor_axes[laxes_ids[i]].approx_interval_error)
-            || (approx_interval_warning != cmor_axes[laxes_ids[i]].approx_interval_warning)){
-                cmor_handle_error_var_variadic(
-                    "The interval values used for the time axis differ "
-                    "from those defined for the frequency \"%s\" "
-                    "used for by variable '%s' (table %s)\n! ",
-                    CMOR_CRITICAL, vrid,
-                    cmor_vars[vrid].frequency,
-                    cmor_vars[vrid].id,
-                    cmor_tables[cmor_vars[vrid].ref_table_id].szTable_id
-                );
+                // Priority 2: If not in CV, try table header
+                if (cv_freq_found == 0 && cmor_tables[cmor_vars[vrid].ref_table_id].interval > 0) {
+                    approx_interval = cmor_tables[cmor_vars[vrid].ref_table_id].interval;
+                    approx_interval_error = cmor_tables[cmor_vars[vrid].ref_table_id].interval_error;
+                    approx_interval_warning = cmor_tables[cmor_vars[vrid].ref_table_id].interval_warning;
+                }
+                // Priority 3: If not in CV or table, use hardcoded mapping
+                else if (cv_freq_found == 0 && cmor_vars[vrid].frequency[0] != '\0') {
+                    double hardcoded = cmor_get_frequency_interval(cmor_vars[vrid].frequency);
+                    if (hardcoded >= 0.0) {
+                        approx_interval = hardcoded;
+                        // Keep default error/warning thresholds
+                    }
+                }
+
+                // Verify the time axis interval matches the frequency-based interval
+                if((approx_interval != cmor_axes[laxes_ids[i]].approx_interval)
+                || (approx_interval_error != cmor_axes[laxes_ids[i]].approx_interval_error)
+                || (approx_interval_warning != cmor_axes[laxes_ids[i]].approx_interval_warning)){
+                    cmor_handle_error_var_variadic(
+                        "The interval values used for the time axis differ "
+                        "from those defined for the frequency \"%s\" "
+                        "used for by variable '%s' (table %s)\n! ",
+                        CMOR_CRITICAL, vrid,
+                        cmor_vars[vrid].frequency,
+                        cmor_vars[vrid].id,
+                        cmor_tables[cmor_vars[vrid].ref_table_id].szTable_id
+                    );
+                }
             }
         }
         if (cmor_axes[laxes_ids[i]].ref_table_id != CMOR_TABLE
@@ -1966,7 +2039,6 @@ void cmor_init_var_def(cmor_var_def_t * var, int table_id)
     var->ndims = 0;
     memset(var->flag_values, 0, sizeof(var->flag_values));
     memset(var->flag_meanings, 0, sizeof(var->flag_meanings));
-    memset(var->chunking_dimensions, 0, sizeof(var->chunking_dimensions));
     for (n = 0; n < CMOR_MAX_DIMENSIONS; n++)
         var->dimensions[n] = -1;
     var->type = cmor_tables[table_id].type;
@@ -2164,9 +2236,6 @@ int cmor_set_var_def_att(cmor_var_def_t * var, char *att, char *val)
     } else if (strcmp(att, VARIABLE_ATT_MAXMEANABS) == 0) {
 
         var->ok_max_mean_abs = atof(val);
-    } else if (strcmp(att, VARIABLE_ATT_CHUNKING) == 0) {
-        strncpy(var->chunking_dimensions, val, CMOR_MAX_STRING);
-
     } else if (strcmp(att, VARIABLE_ATT_SHUFFLE) == 0) {
 
         var->shuffle = atoi(val);
@@ -2281,88 +2350,39 @@ int cmor_set_var_def_att(cmor_var_def_t * var, char *att, char *val)
 }
 
 /************************************************************************/
-/*                      cmor_set_var_chunking()                         */
+/*                        cmor_set_chunking()                           */
 /************************************************************************/
-int cmor_set_chunking(int var_id, int nTableID, size_t nc_dim_chunking[])
+int cmor_set_chunking(int var_id, int *nc_dim_chunking)
 {
-
-    char chunk_dimensions[CMOR_MAX_STRING];
-    char *token;
-    int n;
     int ndims = cmor_vars[var_id].ndims;
-    int nChunks[CMOR_MAX_DIMENSIONS];   // T, Z, Y,X
-    int nAxisID;
 
     cmor_add_traceback("cmor_set_chunking");
     cmor_is_setup();
 
-    strcpy(chunk_dimensions, cmor_vars[var_id].chunking_dimensions);
-    if (chunk_dimensions[0] == '\0') {
-        cmor_pop_traceback();
-        return (-1);
+    if (cmor_vars[var_id].chunking_dimensions != NULL) {
+        free(cmor_vars[var_id].chunking_dimensions);
     }
 
-    token = strtok(chunk_dimensions, " ");
-    n = 0;
-    // Read in all chunks
-    while (token != NULL) {
-        nChunks[n] = atoi(token);
-        n++;
-        token = strtok(NULL, " ");
-    }
-    // We need 4 dimensions corresponding to T, Z, Y,X
-    if (n != 4) {
-        return (-1);
-    }
-    // Validate Chunks size.
-    for (n = 0; n < ndims; n++) {
-        nAxisID = cmor_vars[var_id].axes_ids[n];
-        if (cmor_axes[nAxisID].axis == 'X') {
-            if (nChunks[3] > cmor_axes[nAxisID].length) {
-                nChunks[3] = cmor_axes[nAxisID].length;
-            } else if (nChunks[3] <= 0) {
-                nChunks[3] = 1;
+    if (nc_dim_chunking != NULL) {
+        cmor_vars[var_id].chunking_dimensions = (int *)malloc(ndims * sizeof(int));
+        for(int i = 0; i < ndims; i++) {
+            int chunking_dim = nc_dim_chunking[i];
+            if (chunking_dim < 0) {
+                cmor_handle_error_variadic(
+                    "Chunking dimension for variable '%s' along axis '%s' is %d, "
+                    "which is invalid and will be replaced with 0.",
+                    CMOR_WARNING,
+                    cmor_vars[var_id].id,
+                    cmor_axes[cmor_vars[var_id].axes_ids[i]].id,
+                    chunking_dim);
+                chunking_dim = 0;
             }
+            cmor_vars[var_id].chunking_dimensions[i] = chunking_dim;
         }
-        if (cmor_axes[nAxisID].axis == 'Y') {
-            if (nChunks[2] > cmor_axes[nAxisID].length) {
-                nChunks[2] = cmor_axes[nAxisID].length;
-            } else if (nChunks[2] <= 0) {
-                nChunks[2] = 1;
-            }
-        }
-        if (cmor_axes[nAxisID].axis == 'Z') {
-            if (nChunks[1] > cmor_axes[nAxisID].length) {
-                nChunks[1] = cmor_axes[nAxisID].length;
-            } else if (nChunks[1] <= 0) {
-                nChunks[1] = 1;
-            }
-        }
-        if (cmor_axes[nAxisID].axis == 'T') {
-            if (nChunks[0] > cmor_axes[nAxisID].length) {
-                nChunks[0] = cmor_axes[nAxisID].length;
-            } else if (nChunks[0] <= 0) {
-                nChunks[0] = 1;
-            }
-        }
+    } else {
+        cmor_vars[var_id].chunking_dimensions = NULL;
     }
-    // Assign chunks;
-    n = 0;
-    while (n < ndims) {
-        nAxisID = cmor_vars[var_id].axes_ids[n];
-        if (cmor_axes[nAxisID].axis == 'X') {
-            nc_dim_chunking[n] = nChunks[3];
-        } else if (cmor_axes[nAxisID].axis == 'Y') {
-            nc_dim_chunking[n] = nChunks[2];
-        } else if (cmor_axes[nAxisID].axis == 'Z') {
-            nc_dim_chunking[n] = nChunks[1];
-        } else if (cmor_axes[nAxisID].axis == 'T') {
-            nc_dim_chunking[n] = nChunks[0];
-        } else {
-            nc_dim_chunking[n] = 1;
-        }
-        n++;
-    }
+
     cmor_pop_traceback();
     return (0);
 
