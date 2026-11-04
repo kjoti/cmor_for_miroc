@@ -18,7 +18,7 @@ USER_INPUT = {
     "cv_version": "6.2.19.0",
     "experiment_id": "amip",
     "forcing_index": "f3",
-    "grid_label": "g999",
+    "grid_label": "g010",
     "initialization_index": "i1",
     "institution_id": "CCCma",
     "license_id": "CC-BY-4.0",
@@ -27,10 +27,8 @@ USER_INPUT = {
     "physics_index": "p1",
     "realization_index": "r9",
     "source_id": "ACCESS-ESM1-6",
-    "host_collection": "CMIP7",
     "frequency": "mon",
     "region": "glb",
-    "archive_id": "WCRP"
 }
 
 
