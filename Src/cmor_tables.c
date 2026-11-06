@@ -687,10 +687,10 @@ int cmor_load_table(char szTable[CMOR_MAX_STRING], int *table_id)
         strcpy(szControlFilenameJSON, cmor_input_path);
         strcat(szControlFilenameJSON, "/");
         strcat(szControlFilenameJSON, szCV);
-        strcpy(szAxisEntryFilenameJSON, szPath);
+        strcpy(szAxisEntryFilenameJSON, cmor_input_path);
         strcat(szAxisEntryFilenameJSON, "/");
         strcat(szAxisEntryFilenameJSON, szAxisEntryFN);
-        strcpy(szFormulaVarFilenameJSON, szPath);
+        strcpy(szFormulaVarFilenameJSON, cmor_input_path);
         strcat(szFormulaVarFilenameJSON, "/");
         strcat(szFormulaVarFilenameJSON, szFormulaVarFN);
 
