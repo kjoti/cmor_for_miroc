@@ -5169,6 +5169,9 @@ int cmor_write(int var_id, void *data, char type, char *file_suffix,
     strcpy(msg, "");
     strcpy(ctmp2, "");
     strcpy(outpath, "");
+    for (i = 0; i < CMOR_MAX_VARIABLES; i++) {
+        nc_bnds_vars[i] = -1;
+    }
 
     cmor_is_setup();
     if (var_id > cmor_nvars) {
